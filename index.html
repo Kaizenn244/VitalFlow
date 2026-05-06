@@ -1,14 +1,24 @@
-<!DOCTYPE html>
-<!-- saved from url=(0070)file:///C:/Users/yuvra.ASUS-VIVOBOOK2/Downloads/VitalFlow_Premium.html -->
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d0d0f">
 <title>VitalFlow</title>
-<link rel="manifest" href="data:application/json;charset=utf-8,{%0A  %22name%22: %22VitalFlow%22,%0A  %22short_name%22: %22VitalFlow%22,%0A  %22description%22: %22Your complete health and habits companion%22,%0A  %22start_url%22: %22.%22,%0A  %22display%22: %22standalone%22,%0A  %22background_color%22: %220d0d0f%22,%0A  %22theme_color%22: %2200e5a0%22,%0A  %22icons%22: [{%22src%22:%22data:image/svg+xml,&lt;svg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 100 100&#39;&gt;&lt;rect width=&#39;100&#39; height=&#39;100&#39; rx=&#39;20&#39; fill=&#39;%230d0d0f&#39;/&gt;%3Ctext y=&#39;.9em&#39; font-size=&#39;80&#39; x=&#39;10&#39;&gt;%E2%9A%A1&lt;/text&gt;&lt;/svg&gt;%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]%0A}">
+<link rel="manifest" href="data:application/json;charset=utf-8,{
+  %22name%22: %22VitalFlow%22,
+  %22short_name%22: %22VitalFlow%22,
+  %22description%22: %22Your complete health and habits companion%22,
+  %22start_url%22: %22.%22,
+  %22display%22: %22standalone%22,
+  %22background_color%22: %220d0d0f%22,
+  %22theme_color%22: %2200e5a0%22,
+  %22icons%22: [{%22src%22:%22data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230d0d0f'/>%3Ctext y='.9em' font-size='80' x='10'>⚡</text></svg>%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]
+}">
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
@@ -414,24 +424,24 @@ body::before {
         <span class="app-title">VitalFlow ⚡</span>
         <div style="display:flex;gap:6px;align-items:center;">
           <span class="streak-badge" id="streak-badge">🔥 0 days</span>
-          <span id="rank-badge" style="background: rgb(26, 26, 34); border: 1px solid rgba(205, 127, 50, 0.267); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: rgb(205, 127, 50); cursor: pointer;" onclick="openRankModal()">🥉 Bronze</span>
+          <span id="rank-badge" style="background:#1a1a22;border:1px solid #2a2a35;border-radius:20px;padding:3px 10px;font-size:11px;color:#cd7f32;cursor:pointer;" onclick="openRankModal()">🥉 Bronze</span>
         </div>
       </div>
       <div id="home-profile-name" style="display:none;font-size:12px;color:#00e5a0;margin-bottom:3px;font-weight:500;"></div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">
-        <div style="font-size:11px;color:#888;" id="today-date">Tuesday, 5 May</div>
+        <div style="font-size:11px;color:#888;" id="today-date"></div>
         <div class="goal-pill" onclick="openGoalModal()">🎯 <span id="goal-display">2500</span> kcal</div>
       </div>
     </div>
     <div class="ring-container">
       <svg width="148" height="148" viewBox="0 0 148 148">
-        <circle cx="74" cy="74" r="58" fill="none" stroke="#1e1e26" stroke-width="13"></circle>
-        <circle cx="74" cy="74" r="58" fill="none" stroke="#00e5a0" stroke-width="13" stroke-linecap="round" stroke-dasharray="364" stroke-dashoffset="364" id="cal-ring" transform="rotate(-90 74 74)" style="transition: stroke-dashoffset 0.8s; stroke: rgb(0, 229, 160);"></circle>
+        <circle cx="74" cy="74" r="58" fill="none" stroke="#1e1e26" stroke-width="13"/>
+        <circle cx="74" cy="74" r="58" fill="none" stroke="#00e5a0" stroke-width="13" stroke-linecap="round" stroke-dasharray="364" stroke-dashoffset="364" id="cal-ring" transform="rotate(-90 74 74)" style="transition:stroke-dashoffset 0.8s;"/>
       </svg>
       <div class="ring-center">
         <div class="ring-cal" id="ring-cal">0</div>
         <div class="ring-lbl">kcal eaten</div>
-        <div class="ring-sub" id="ring-remain">2500 left</div>
+        <div class="ring-sub" id="ring-remain"></div>
       </div>
     </div>
     <div class="net-bar" id="net-bar" style="display:none;">
@@ -442,40 +452,40 @@ body::before {
       <div class="net-item"><div class="net-val" id="net-total" style="color:#ffa726;">0</div><div class="net-lbl">Net</div></div>
     </div>
     <div class="macro-grid">
-      <div class="macro-card" onclick="openMacroGoal(&#39;protein&#39;)" style="cursor:pointer;">
+      <div class="macro-card" onclick="openMacroGoal('protein')" style="cursor:pointer;">
         <div class="macro-name">Protein <span style="font-size:8px;color:#444;">/ <span id="mg-protein">150</span>g</span></div>
         <div class="macro-val" id="m-p" style="color:#00e5a0;">0g</div>
         <div class="macro-bar-bg"><div class="macro-bar-fill" id="b-p" style="background:#00e5a0;width:0%;"></div></div>
       </div>
-      <div class="macro-card" onclick="openMacroGoal(&#39;carbs&#39;)" style="cursor:pointer;">
+      <div class="macro-card" onclick="openMacroGoal('carbs')" style="cursor:pointer;">
         <div class="macro-name">Carbs <span style="font-size:8px;color:#444;">/ <span id="mg-carbs">300</span>g</span></div>
         <div class="macro-val" id="m-c" style="color:#29b6f6;">0g</div>
         <div class="macro-bar-bg"><div class="macro-bar-fill" id="b-c" style="background:#29b6f6;width:0%;"></div></div>
       </div>
-      <div class="macro-card" onclick="openMacroGoal(&#39;fats&#39;)" style="cursor:pointer;">
+      <div class="macro-card" onclick="openMacroGoal('fats')" style="cursor:pointer;">
         <div class="macro-name">Fats <span style="font-size:8px;color:#444;">/ <span id="mg-fats">80</span>g</span></div>
         <div class="macro-val" id="m-f" style="color:#ffa726;">0g</div>
         <div class="macro-bar-bg"><div class="macro-bar-fill" id="b-f" style="background:#ffa726;width:0%;"></div></div>
       </div>
     </div>
     <!-- Custom nutrient tracker -->
-    <div id="custom-nutrient-bar" style="background: rgb(24, 24, 28); border: 1px solid rgb(42, 42, 53); border-radius: 10px; padding: 9px 12px; margin: 0px 0px 8px; display: none; align-items: center; gap: 8px;">
+    <div id="custom-nutrient-bar" style="display:none;background:#18181c;border:1px solid #2a2a35;border-radius:10px;padding:9px 12px;margin:0 0 8px;display:flex;align-items:center;gap:8px;">
       <div style="font-size:11px;color:#888;min-width:60px;" id="cn-label">—</div>
       <div style="flex:1;height:5px;background:#2a2a35;border-radius:3px;"><div id="cn-bar" style="height:5px;border-radius:3px;background:#e040fb;transition:width 0.5s;width:0%;"></div></div>
       <div style="font-size:10px;color:#555;white-space:nowrap;" id="cn-val">0/0</div>
-      <button onclick="openMacroGoal(&#39;custom&#39;)" style="background:none;border:none;color:#555;cursor:pointer;font-size:13px;">✏️</button>
+      <button onclick="openMacroGoal('custom')" style="background:none;border:none;color:#555;cursor:pointer;font-size:13px;">✏️</button>
     </div>
-    <div id="custom-nutrient-add" style="margin: 0px 0px 8px; display: block;">
-      <button onclick="openMacroGoal(&#39;custom&#39;)" style="background:#13131a;border:1px dashed #2a2a35;border-radius:10px;padding:8px;width:100%;color:#555;font-size:11px;cursor:pointer;font-family:inherit;">+ Add custom nutrient goal</button>
+    <div id="custom-nutrient-add" style="margin:0 0 8px;">
+      <button onclick="openMacroGoal('custom')" style="background:#13131a;border:1px dashed #2a2a35;border-radius:10px;padding:8px;width:100%;color:#555;font-size:11px;cursor:pointer;font-family:inherit;">+ Add custom nutrient goal</button>
     </div>
     <div class="card" id="micro-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span class="card-title" style="margin:0;">🧂 Micronutrients</span>
         <span style="font-size:10px;color:#555;">Daily targets</span>
       </div>
-      <div id="micro-bars"><div class="micro-row"><div class="micro-label">Sodium</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:0%;background:#ef5350;"></div></div><div class="micro-val">0/2300mg</div></div><div class="micro-row"><div class="micro-label">Sugar</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:0%;background:#ff7043;"></div></div><div class="micro-val">0/50g</div></div><div class="micro-row"><div class="micro-label">Fiber</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:0%;background:#66bb6a;"></div></div><div class="micro-val">0/30g</div></div><div class="micro-row"><div class="micro-label">Calcium</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:0%;background:#42a5f5;"></div></div><div class="micro-val">0/1000mg</div></div><div class="micro-row"><div class="micro-label">Iron</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:0%;background:#ab47bc;"></div></div><div class="micro-val">0/18mg</div></div></div>
+      <div id="micro-bars"></div>
     </div>
-    <div class="card" id="water-card" style="border-color: rgb(42, 42, 53);">
+    <div class="card" id="water-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
         <span class="card-title" style="margin:0;">💧 Paani Tracker</span>
         <button style="background:none;border:none;color:#555;cursor:pointer;font-size:16px;" onclick="toggleWS()">⚙️</button>
@@ -483,15 +493,15 @@ body::before {
       <div class="water-section">
         <div class="glass-wrap" onclick="addWater()">
           <svg viewBox="0 0 62 88" style="width:62px;height:88px;">
-            <defs><clippath id="gc"><path d="M7 6 L11 80 Q11 84 17 84 L45 84 Q51 84 51 80 L55 6 Z"></path></clippath></defs>
-            <path d="M7 6 L11 80 Q11 84 17 84 L45 84 Q51 84 51 80 L55 6 Z" fill="none" stroke="#2a2a35" stroke-width="2"></path>
-            <rect id="water-rect" x="8" y="84" width="46" height="0" fill="#1a6fa0" opacity="0.85" clip-path="url(#gc)" style="transition:height 0.55s,y 0.55s;"></rect>
-            <line x1="15" y1="12" x2="13" y2="76" stroke="rgba(255,255,255,0.06)" stroke-width="3" stroke-linecap="round"></line>
+            <defs><clipPath id="gc"><path d="M7 6 L11 80 Q11 84 17 84 L45 84 Q51 84 51 80 L55 6 Z"/></clipPath></defs>
+            <path d="M7 6 L11 80 Q11 84 17 84 L45 84 Q51 84 51 80 L55 6 Z" fill="none" stroke="#2a2a35" stroke-width="2"/>
+            <rect id="water-rect" x="8" y="84" width="46" height="0" fill="#1a6fa0" opacity="0.85" clip-path="url(#gc)" style="transition:height 0.55s,y 0.55s;"/>
+            <line x1="15" y1="12" x2="13" y2="76" stroke="rgba(255,255,255,0.06)" stroke-width="3" stroke-linecap="round"/>
           </svg>
         </div>
         <div style="flex:1;">
           <div class="water-stat" id="water-ml-d">0 ml</div>
-          <div style="font-size:10px;color:#888;margin-bottom:7px;">of <span id="wgoal-lbl">2000</span> ml · <span id="wglass-lbl">0/8 glasses</span></div>
+          <div style="font-size:10px;color:#888;margin-bottom:7px;">of <span id="wgoal-lbl">2000</span> ml · <span id="wglass-lbl">0 glasses</span></div>
           <div style="display:flex;gap:7px;">
             <button class="w-btn-add" onclick="addWater()">+ <span id="wpg-lbl">250ml</span></button>
             <button class="w-btn" onclick="removeWater()">Undo</button>
@@ -500,14 +510,14 @@ body::before {
       </div>
       <div id="water-settings" style="display:none;margin-top:10px;border-top:1px solid #2a2a35;padding-top:10px;">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-          <span class="tab-pill active" id="mode-ml" onclick="setWMode(&#39;ml&#39;)">By glass</span>
-          <span class="tab-pill" id="mode-bottle" onclick="setWMode(&#39;bottle&#39;)">By bottle</span>
+          <span class="tab-pill" id="mode-ml" onclick="setWMode('ml')">By glass</span>
+          <span class="tab-pill" id="mode-bottle" onclick="setWMode('bottle')">By bottle</span>
         </div>
-        <div id="w-ml-set" style="display: block;">
+        <div id="w-ml-set">
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
             <span class="tab-pill" onclick="setMpg(150)">150ml</span><span class="tab-pill" onclick="setMpg(200)">200ml</span><span class="tab-pill" onclick="setMpg(250)">250ml</span><span class="tab-pill" onclick="setMpg(350)">350ml</span><span class="tab-pill" onclick="setMpg(500)">500ml</span>
           </div>
-          <div style="display:flex;gap:8px;margin-bottom:10px;"><input class="inp" id="cml" type="number" placeholder="Custom ml per glass" style="margin:0;flex:1;"><button class="add-btn" style="border-radius:9px;padding:8px 12px;" onclick="setMpg(parseInt(document.getElementById(&#39;cml&#39;).value)||250)">Set</button></div>
+          <div style="display:flex;gap:8px;margin-bottom:10px;"><input class="inp" id="cml" type="number" placeholder="Custom ml per glass" style="margin:0;flex:1;"><button class="add-btn" style="border-radius:9px;padding:8px 12px;" onclick="setMpg(parseInt(document.getElementById('cml').value)||250)">Set</button></div>
           <div style="font-size:10px;color:#888;margin-bottom:5px;">Daily total goal:</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">
             <span class="tab-pill" onclick="setWaterGoal(1500)">1.5L</span>
@@ -516,7 +526,7 @@ body::before {
             <span class="tab-pill" onclick="setWaterGoal(3000)">3L</span>
             <span class="tab-pill" onclick="setWaterGoal(3500)">3.5L</span>
           </div>
-          <div style="display:flex;gap:8px;"><input class="inp" id="cwgoal" type="number" placeholder="Custom daily goal (ml)" style="margin:0;flex:1;"><button class="add-btn" style="border-radius:9px;padding:8px 12px;" onclick="setWaterGoal(parseInt(document.getElementById(&#39;cwgoal&#39;).value)||2000)">Set</button></div>
+          <div style="display:flex;gap:8px;"><input class="inp" id="cwgoal" type="number" placeholder="Custom daily goal (ml)" style="margin:0;flex:1;"><button class="add-btn" style="border-radius:9px;padding:8px 12px;" onclick="setWaterGoal(parseInt(document.getElementById('cwgoal').value)||2000)">Set</button></div>
         </div>
         <div id="w-bottle-set" style="display:none;">
           <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;"><span class="tab-pill" onclick="setBottle(500)">500ml</span><span class="tab-pill" onclick="setBottle(750)">750ml</span><span class="tab-pill" onclick="setBottle(1000)">1L</span><span class="tab-pill" onclick="setBottle(1500)">1.5L</span><span class="tab-pill" onclick="setBottle(2000)">2L</span></div>
@@ -524,19 +534,19 @@ body::before {
         </div>
       </div>
     </div>
-    <div class="card" id="habit-home-card" style="display: block; padding: 12px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span class="card-title" style="margin:0;">🌱 Habits Today</span><span style="font-size:11px;color:#555;">0/2 done</span></div><div style="font-size:10px;color:#00e5a0;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">✅ Good Habits</div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;"><div style="background:#1e1e26;border:1.5px solid #3a3a45;border-radius:10px;padding:6px 11px;font-size:11px;color:#aaa;font-weight:600;display:flex;align-items:center;gap:4px;white-space:nowrap;"><span>booook reading</span></div></div><div style="font-size:10px;color:#ff5252;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">🚫 Breaking Bad</div><div style="display:flex;gap:5px;flex-wrap:wrap;"><div style="background:#1e1e26;border:1.5px solid #3a3a45;border-radius:10px;padding:6px 11px;font-size:11px;color:#aaa;font-weight:600;display:flex;align-items:center;gap:4px;white-space:nowrap;"><span>doomscrolling</span></div></div></div>
+    <div class="card" id="habit-home-card" style="display:none;padding:12px;"></div>
 
-    <div id="mascot-card" style="background: linear-gradient(135deg, rgb(19, 19, 26), rgb(13, 31, 21)); border: 1px solid rgba(179, 157, 219, 0.267); border-radius: 16px; padding: 12px 14px; margin: 8px 0px; display: flex; gap: 12px; align-items: center;">
-      <div id="mascot-avatar" style="font-size:44px;flex-shrink:0;line-height:1;filter:drop-shadow(0 0 8px #00e5a044);">🏋️</div>
+    <div id="mascot-card" style="background:linear-gradient(135deg,#13131a,#0d1f15);border:1px solid #1e3a2e;border-radius:16px;padding:12px 14px;margin:8px 0;display:flex;gap:12px;align-items:center;">
+      <div id="mascot-avatar" style="font-size:44px;flex-shrink:0;line-height:1;filter:drop-shadow(0 0 8px #00e5a044);">🥦</div>
       <div style="flex:1;">
-        <div style="font-size: 11px; color: rgb(179, 157, 219); font-weight: 700; margin-bottom: 3px;" id="mascot-name">Muscle Mooli</div>
-        <div style="font-size:12px;color:#ccc;line-height:1.5;" id="quote-text">Muscles ko fuel chahiye! Khana khao, gym baad mein! 🏋️</div>
+        <div style="font-size:11px;color:#00e5a0;font-weight:700;margin-bottom:3px;" id="mascot-name">Broco</div>
+        <div style="font-size:12px;color:#ccc;line-height:1.5;" id="quote-text"></div>
       </div>
     </div>
     <div class="section-header"><span class="section-title">🍽️ Aaj ka Khana</span><button class="add-btn" onclick="openMealModal()">+ Add Meal</button></div>
-    <div id="meals-container"><div class="empty-state">Kuch nahi khaya abhi — add karo!</div></div>
+    <div id="meals-container"></div>
     <div class="section-header"><span class="section-title">💪 Aaj ki Workout</span><button class="add-btn" onclick="openWorkoutModal()">+ Log</button></div>
-    <div id="workout-container"><div class="empty-state">Koi workout nahi — gym gaye? 💪</div></div>
+    <div id="workout-container"></div>
   </div>
 
 
@@ -619,8 +629,8 @@ body::before {
     <div class="card">
       <div class="grid2" style="margin-bottom:8px;"><input class="inp" id="pl-age" type="number" placeholder="Age" style="margin:0;"><input class="inp" id="pl-weight" type="number" placeholder="Weight (kg)" style="margin:0;"></div>
       <div class="grid2" style="margin-bottom:8px;"><input class="inp" id="pl-height" type="number" placeholder="Height (cm)" style="margin:0;"><select class="sel" id="pl-gender" style="margin:0;"><option value="male">Male</option><option value="female">Female</option></select></div>
-      <select class="sel" id="pl-activity"><option value="1.2">Sedentary</option><option value="1.375">Light (1-3x/week)</option><option value="1.55" selected="">Moderate (3-5x/week)</option><option value="1.725">Very active</option><option value="1.9">Athlete</option></select>
-      <select class="sel" id="pl-goal"><option value="gain">Gain weight &amp; muscle</option><option value="lose">Lose weight</option><option value="maintain">Maintain</option></select>
+      <select class="sel" id="pl-activity"><option value="1.2">Sedentary</option><option value="1.375">Light (1-3x/week)</option><option value="1.55" selected>Moderate (3-5x/week)</option><option value="1.725">Very active</option><option value="1.9">Athlete</option></select>
+      <select class="sel" id="pl-goal"><option value="gain">Gain weight & muscle</option><option value="lose">Lose weight</option><option value="maintain">Maintain</option></select>
       <button class="calc-btn" onclick="generatePlan()">Generate My Diet Plan</button>
     </div>
     <div id="bmi-result" style="display:none;">
@@ -690,7 +700,7 @@ body::before {
       </div>
       <div style="font-size:10px;color:#555;margin-bottom:3px;">Main goal</div>
       <select class="sel" id="pf-goal">
-        <option value="gain">💪 Gain weight &amp; muscle (Bulk)</option>
+        <option value="gain">💪 Gain weight & muscle (Bulk)</option>
         <option value="lose">🔥 Lose weight (Cut)</option>
         <option value="maintain">⚖️ Maintain weight</option>
       </select>
@@ -732,7 +742,12 @@ body::before {
 
   <!-- MORE -->
   <div id="screen-more" class="screen">
-    <div class="header" style="padding:18px 0 10px;"><div class="app-title" style="font-size:18px;">More</div></div>
+    <div class="header" style="padding:18px 0 10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="app-title" style="font-size:18px;">More</div>
+        <button onclick="showScreen('profile',document.querySelector('.nav-btn'))" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text2);border-radius:20px;padding:5px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">👤 Profile</button>
+      </div>
+    </div>
 
     <div class="card"><div class="card-title">📊 Weekly calories</div><div class="bar-chart" id="weekly-chart"></div></div>
     <div class="card"><div class="card-title">⭐ Quick-add favorites</div><div id="fav-container"><div class="empty-state">Star a food to save here</div></div></div>
@@ -741,7 +756,7 @@ body::before {
 
     <!-- PWA INSTALL BUTTON -->
     <div id="pwa-install-btn" style="display:none;margin-bottom:8px;">
-      <button onclick="window.__showInstall&amp;&amp;window.__showInstall()" style="width:100%;background:linear-gradient(135deg,#001a0f,#0d1f15);border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">📲 Install VitalFlow as App</button>
+      <button onclick="window.__showInstall&&window.__showInstall()" style="width:100%;background:linear-gradient(135deg,#001a0f,#0d1f15);border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">📲 Install VitalFlow as App</button>
     </div>
 
     <!-- HABITS SECTION -->
@@ -750,7 +765,7 @@ body::before {
         <div class="card-title" style="margin:0;">🌱 Better Health Streaks</div>
         <button onclick="openAddHabitModal()" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:20px;padding:4px 11px;font-size:11px;cursor:pointer;font-family:inherit;">+ Add</button>
       </div>
-      <div style="font-size:10px;color:#555;margin-bottom:10px;">Track habits to build &amp; addictions to break</div>
+      <div style="font-size:10px;color:#555;margin-bottom:10px;">Track habits to build & addictions to break</div>
 
       <div class="section-divider" style="color:#00e5a0;">✅ Good Habits</div>
       <div id="good-habits-list"><div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits yet — add one!</div></div>
@@ -765,7 +780,7 @@ body::before {
       <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5;">Export all your data as a file to keep it safe or transfer to a new device.</div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button onclick="exportData()" style="flex:1;background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">📤 Export Data</button>
-        <button onclick="document.getElementById(&#39;import-file&#39;).click()" style="flex:1;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">📥 Import Data</button>
+        <button onclick="document.getElementById('import-file').click()" style="flex:1;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">📥 Import Data</button>
       </div>
       <input type="file" id="import-file" accept=".json" style="display:none;" onchange="importData(event)">
       <div style="font-size:10px;color:#444;line-height:1.5;">Firebase cloud sync (Gmail login) will be added in the next update for automatic cross-device sync.</div>
@@ -783,11 +798,11 @@ body::before {
 </div>
 
 <nav class="bottom-nav">
-  <button class="nav-btn active" onclick="showScreen(&#39;home&#39;,this)"><span class="nav-icon">🏠</span><span>Home</span></button>
-  <button class="nav-btn" onclick="showScreen(&#39;analytics&#39;,this);renderAnalytics();"><span class="nav-icon">📊</span><span>Stats</span></button>
-  <button class="nav-btn" onclick="showScreen(&#39;calendar&#39;,this);renderCalendar();"><span class="nav-icon">📅</span><span>Calendar</span></button>
-  <button class="nav-btn" onclick="showScreen(&#39;profile&#39;,this);renderProfile();"><span class="nav-icon">👤</span><span>Profile</span></button>
-  <button class="nav-btn" onclick="showScreen(&#39;more&#39;,this);renderMore();"><span class="nav-icon">☰</span><span>More</span></button>
+  <button class="nav-btn active" onclick="showScreen('home',this)"><span class="nav-icon">🏠</span><span>Home</span></button>
+  <button class="nav-btn" onclick="showScreen('analytics',this);renderAnalytics();"><span class="nav-icon">📊</span><span>Stats</span></button>
+  <button class="nav-btn" onclick="showScreen('myfoods',this);renderMyFoods();"><span class="nav-icon">🍱</span><span>My Foods</span></button>
+  <button class="nav-btn" onclick="showScreen('calendar',this);renderCalendar();"><span class="nav-icon">📅</span><span>Calendar</span></button>
+  <button class="nav-btn" onclick="showScreen('more',this);renderMore();"><span class="nav-icon">☰</span><span>More</span></button>
 </nav>
 
 <!-- MEAL MODAL -->
@@ -824,7 +839,7 @@ body::before {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="modal-title" id="addfood-title">New Food</span><button class="modal-close" onclick="closeAddFoodModal()">×</button></div>
     <div class="tip-box">Packet ya Google se values dekho aur fill karo.</div>
     <input class="inp" id="af-name" placeholder="Food name" oninput="updatePreview()">
-    <select class="sel" id="af-cat"><option value="Breakfast">Breakfast</option><option value="Lunch">Lunch</option><option value="Dinner">Dinner</option><option value="Snacks">Snacks</option><option value="Fruits &amp; Veg">Fruits &amp; Veg</option></select>
+    <select class="sel" id="af-cat"><option value="Breakfast">Breakfast</option><option value="Lunch">Lunch</option><option value="Dinner">Dinner</option><option value="Snacks">Snacks</option><option value="Fruits & Veg">Fruits & Veg</option></select>
     <input class="inp" id="af-serving" placeholder="Serving size (e.g. 1 bowl, 100g) — optional">
     <div style="font-size:10px;color:#555;margin-bottom:6px;">Macros (per serving):</div>
     <div class="grid2" style="margin-bottom:7px;">
@@ -901,8 +916,8 @@ body::before {
     </div>
 
     <div style="display:flex;gap:7px;margin-bottom:12px;">
-      <button id="htype-good" onclick="setHabitType(&#39;good&#39;)" style="flex:1;background:#001a0f;border:2px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Good Habit</button>
-      <button id="htype-bad" onclick="setHabitType(&#39;bad&#39;)" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🚫 Bad Habit</button>
+      <button id="htype-good" onclick="setHabitType('good')" style="flex:1;background:#001a0f;border:2px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">✅ Good Habit</button>
+      <button id="htype-bad" onclick="setHabitType('bad')" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:10px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">🚫 Bad Habit</button>
     </div>
 
     <input class="inp" id="hab-name" placeholder="Habit name (e.g. Read 20 mins, No sugar)">
@@ -918,9 +933,9 @@ body::before {
       <input class="inp" id="hab-days" type="number" placeholder="Days per week (e.g. 5)" min="1" max="7">
       <div style="font-size:10px;color:#555;margin-bottom:5px;">Points per completion:</div>
       <div style="display:flex;gap:6px;margin-bottom:8px;">
-        <span class="tab-pill" onclick="document.getElementById(&#39;hab-pts&#39;).value=5">+5 pts</span>
-        <span class="tab-pill" onclick="document.getElementById(&#39;hab-pts&#39;).value=10">+10 pts</span>
-        <span class="tab-pill" onclick="document.getElementById(&#39;hab-pts&#39;).value=15">+15 pts</span>
+        <span class="tab-pill" onclick="document.getElementById('hab-pts').value=5">+5 pts</span>
+        <span class="tab-pill" onclick="document.getElementById('hab-pts').value=10">+10 pts</span>
+        <span class="tab-pill" onclick="document.getElementById('hab-pts').value=15">+15 pts</span>
       </div>
       <input class="inp" id="hab-pts" type="number" placeholder="Points per completion (default 5)">
     </div>
@@ -928,9 +943,9 @@ body::before {
     <div id="bad-habit-opts" style="display:none;">
       <div style="font-size:10px;color:#555;margin-bottom:5px;">Severity level:</div>
       <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <button onclick="setHabSeverity(&#39;normal&#39;)" id="sev-normal" style="flex:1;background:#001a0f;border:2px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Normal</button>
-        <button onclick="setHabSeverity(&#39;moderate&#39;)" id="sev-moderate" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Moderate</button>
-        <button onclick="setHabSeverity(&#39;serious&#39;)" id="sev-serious" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Serious</button>
+        <button onclick="setHabSeverity('normal')" id="sev-normal" style="flex:1;background:#001a0f;border:2px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Normal</button>
+        <button onclick="setHabSeverity('moderate')" id="sev-moderate" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Moderate</button>
+        <button onclick="setHabSeverity('serious')" id="sev-serious" style="flex:1;background:#13131a;border:2px solid #2a2a35;color:#555;border-radius:9px;padding:8px 4px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Serious</button>
       </div>
       <div id="sev-desc" style="font-size:11px;color:#888;background:#13131a;border-radius:8px;padding:9px;margin-bottom:8px;line-height:1.5;">
         Normal: Just tracking, no harsh penalty on relapse (−3 pts).
@@ -943,11 +958,11 @@ body::before {
 </div>
 
 <!-- MACRO GOAL MODAL -->
-<div class="modal-overlay" id="macro-modal" onclick="if(event.target===this)document.getElementById(&#39;macro-modal&#39;).classList.remove(&#39;open&#39;)">
+<div class="modal-overlay" id="macro-modal" onclick="if(event.target===this)document.getElementById('macro-modal').classList.remove('open')">
   <div class="modal" style="max-height:60vh;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <span class="modal-title" id="macro-modal-title">Set Protein Goal</span>
-      <button class="modal-close" onclick="document.getElementById(&#39;macro-modal&#39;).classList.remove(&#39;open&#39;)">×</button>
+      <button class="modal-close" onclick="document.getElementById('macro-modal').classList.remove('open')">×</button>
     </div>
     <div style="font-size:11px;color:#666;margin-bottom:8px;" id="macro-modal-hint"></div>
     <div id="macro-presets" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;"></div>
@@ -969,11 +984,11 @@ body::before {
 </div>
 
 <!-- RANK MODAL -->
-<div class="modal-overlay" id="rank-modal" onclick="if(event.target===this)document.getElementById(&#39;rank-modal&#39;).classList.remove(&#39;open&#39;)">
+<div class="modal-overlay" id="rank-modal" onclick="if(event.target===this)document.getElementById('rank-modal').classList.remove('open')">
   <div class="modal" style="max-height:80vh;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <span class="modal-title">🏆 Points &amp; Ranks</span>
-      <button class="modal-close" onclick="document.getElementById(&#39;rank-modal&#39;).classList.remove(&#39;open&#39;)">×</button>
+      <span class="modal-title">🏆 Points & Ranks</span>
+      <button class="modal-close" onclick="document.getElementById('rank-modal').classList.remove('open')">×</button>
     </div>
     <!-- current rank display -->
     <div id="rank-current-display" style="background:linear-gradient(135deg,#1a1a22,#13131a);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;">
@@ -1005,9 +1020,9 @@ body::before {
 </div>
 
 <!-- GOAL MODAL -->
-<div class="modal-overlay" id="goal-modal" onclick="if(event.target===this)document.getElementById(&#39;goal-modal&#39;).classList.remove(&#39;open&#39;)">
+<div class="modal-overlay" id="goal-modal" onclick="if(event.target===this)document.getElementById('goal-modal').classList.remove('open')">
   <div class="modal" style="max-height:55vh;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="modal-title">Daily Calorie Goal</span><button class="modal-close" onclick="document.getElementById(&#39;goal-modal&#39;).classList.remove(&#39;open&#39;)">×</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span class="modal-title">Daily Calorie Goal</span><button class="modal-close" onclick="document.getElementById('goal-modal').classList.remove('open')">×</button></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">
       <span class="tab-pill" onclick="applyGoalP(1800)">1800 — Cut</span>
       <span class="tab-pill" onclick="applyGoalP(2000)">2000 — Maintain (F)</span>
@@ -2332,6 +2347,5 @@ window.__showInstall=function(){
   }
 };
 </script>
-
-
-</body></html>
+</body>
+</html>
