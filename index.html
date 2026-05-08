@@ -481,9 +481,8 @@ body::before {
     <div class="card" id="micro-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <span class="card-title" style="margin:0;">🧂 Micronutrients</span>
-        <span style="font-size:10px;color:#555;">Daily targets</span>
-      </div>
-      <div id="micro-bars"></div>
+        <button onclick="openMicroGoalsModal()" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:var(--text2);border-radius:12px;padding:3px 10px;font-size:10px;cursor:pointer;font-family:inherit;">⚙️ Set Goals</button>
+      </div>      <div id="micro-bars"></div>
     </div>
     <div class="card" id="water-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -870,6 +869,36 @@ body::before {
 </div>
 
 
+<!-- MICRO GOALS MODAL -->
+<div class="modal-overlay" id="micro-modal" onclick="if(event.target===this)closeMicroModal()">
+  <div class="modal" style="max-height:80vh;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span class="modal-title">🧂 Set Micronutrient Goals</span>
+      <button class="modal-close" onclick="closeMicroModal()">×</button>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Set your daily targets. These are used to calculate your progress bars.</div>
+
+    <div class="grid2" style="margin-bottom:8px;">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Sodium (mg)</div><input class="inp" id="mg-sodium" type="number" placeholder="Default: 2300" style="margin:0;"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Sugar (g)</div><input class="inp" id="mg-sugar" type="number" placeholder="Default: 50" style="margin:0;"></div>
+    </div>
+    <div class="grid2" style="margin-bottom:8px;">
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Fiber (g)</div><input class="inp" id="mg-fiber" type="number" placeholder="Default: 30" style="margin:0;"></div>
+      <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Calcium (mg)</div><input class="inp" id="mg-calcium" type="number" placeholder="Default: 1000" style="margin:0;"></div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">Iron (mg)</div>
+      <input class="inp" id="mg-iron" type="number" placeholder="Default: 18" style="margin:0;">
+    </div>
+
+    <div style="font-size:10px;color:var(--text3);margin-bottom:10px;">
+      💡 Recommended daily values: Sodium &lt;2300mg · Sugar &lt;50g · Fiber 25-35g · Calcium 1000mg · Iron 18mg
+    </div>
+    <button class="calc-btn" onclick="saveMicroGoals()">Save Goals</button>
+    <button onclick="resetMicroGoals()" style="width:100%;background:none;border:1px solid rgba(255,255,255,0.1);color:var(--text3);border-radius:12px;padding:10px;font-size:13px;cursor:pointer;font-family:inherit;margin-top:8px;">Reset to Defaults</button>
+  </div>
+</div>
+
 <!-- SHARE MODAL -->
 <div class="modal-overlay" id="share-modal" onclick="if(event.target===this)closeShareModal()">
   <div class="modal" style="max-height:90vh;">
@@ -1146,6 +1175,12 @@ const QUOTES=["Ek paratha ek goal — dono important!","Muscle nahi banta ek din
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_S=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const TODAY_KEY=new Date().toISOString().slice(0,10);
+function getMicroTargets(){
+  try{
+    const saved = JSON.parse(localStorage.getItem('vf_micro_goals')||'null');
+    return saved || {sodium:2300,sugar:50,fiber:30,calcium:1000,iron:18};
+  }catch(e){return {sodium:2300,sugar:50,fiber:30,calcium:1000,iron:18};}
+}
 const MICRO_TARGETS={sodium:2300,sugar:50,fiber:30,calcium:1000,iron:18};
 function gS(){try{return JSON.parse(localStorage.getItem('nf_s')||'{}');}catch(e){return{};}}
 function sS(s){localStorage.setItem('nf_s',JSON.stringify(s));}
@@ -1177,7 +1212,8 @@ function updateUI(){
   document.getElementById('m-p').textContent=(Math.round(tP*10)/10)+'g';document.getElementById('m-c').textContent=(Math.round(tCa*10)/10)+'g';document.getElementById('m-f').textContent=(Math.round(tF*10)/10)+'g';
   updateMacroDisplays(tP,tCa,tF);updateRankBadge();
   const nb=document.getElementById('net-bar');if(tBurn>0){nb.style.display='flex';document.getElementById('net-eaten').textContent=tC;document.getElementById('net-burned').textContent=tBurn;document.getElementById('net-total').textContent=tC-tBurn;}else nb.style.display='none';
-  const micros=[{label:'Sodium',val:tSod,unit:'mg',color:'#ef5350',target:MICRO_TARGETS.sodium},{label:'Sugar',val:tSug,unit:'g',color:'#ff7043',target:MICRO_TARGETS.sugar},{label:'Fiber',val:tFib,unit:'g',color:'#66bb6a',target:MICRO_TARGETS.fiber},{label:'Calcium',val:tCalc,unit:'mg',color:'#42a5f5',target:MICRO_TARGETS.calcium},{label:'Iron',val:tIron,unit:'mg',color:'#ab47bc',target:MICRO_TARGETS.iron}];
+  const MT=getMicroTargets();
+  const micros=[{label:'Sodium',val:tSod,unit:'mg',color:'#ef5350',target:MT.sodium},{label:'Sugar',val:tSug,unit:'g',color:'#ff7043',target:MT.sugar},{label:'Fiber',val:tFib,unit:'g',color:'#66bb6a',target:MT.fiber},{label:'Calcium',val:tCalc,unit:'mg',color:'#42a5f5',target:MT.calcium},{label:'Iron',val:tIron,unit:'mg',color:'#ab47bc',target:MT.iron}];
   document.getElementById('micro-bars').innerHTML=micros.map(m=>{const p=Math.min(100,Math.round(m.val/m.target*100));return`<div class="micro-row"><div class="micro-label">${m.label}</div><div class="micro-bar-wrap"><div class="micro-bar-fill" style="width:${p}%;background:${m.val>m.target?'#ff5252':m.color};"></div></div><div class="micro-val">${m.val}/${m.target}${m.unit}</div></div>`;}).join('');
   renderMeals(meals);renderWorkouts(workouts);renderWaterGlass(wml);updateStreak();
   updateMascot(tC, s[TODAY_KEY].waterMl||0);
@@ -1191,7 +1227,14 @@ function setMpg(ml){if(!ml||ml<50)return;wMpg=ml;localStorage.setItem('nf_wml',m
 function setBottle(ml){wMpg=ml;localStorage.setItem('nf_wml',ml);renderWaterGlass(gT()[TODAY_KEY].waterMl||0);}
 function setBC(n){wGoal=wMpg*n;localStorage.setItem('nf_wgoal',wGoal);renderWaterGlass(gT()[TODAY_KEY].waterMl||0);}
 function setWaterGoal(ml){if(!ml||ml<100)return;wGoal=ml;localStorage.setItem('nf_wgoal',ml);renderWaterGlass(gT()[TODAY_KEY].waterMl||0);}
-function renderMeals(meals){const groups={Breakfast:[],Lunch:[],Dinner:[],Snacks:[]};meals.forEach((m,i)=>{if(groups[m.type])groups[m.type].push({...m,idx:i});});const labels={Breakfast:'Nashta',Lunch:'Dopahar',Dinner:'Raat ka Khana',Snacks:'Halka Phulka'};let html='';Object.keys(groups).forEach(type=>{if(!groups[type].length)return;html+=`<div style="margin-bottom:11px;"><div class="meal-group-title">${type} — ${labels[type]}</div>`;groups[type].forEach(m=>{const isFav=favs.find(f=>f.name===m.name);const badge=m.custom?'<span class="my-food-badge">MY</span>':'';html+=`<div class="meal-item"><div style="flex:1;min-width:0;"><div class="meal-name">${m.name}${badge}<span class="fav-star" onclick="toggleFav('${esc(m.name)}',${m.cal},${m.p||0},${m.c||0},${m.f||0})">${isFav?'⭐':'☆'}</span></div><div class="meal-meta">${m.p||0}g P · ${m.c||0}g C · ${m.f||0}g F${m.sodium?' · '+m.sodium+'mg Na':''}</div></div><div style="display:flex;align-items:center;gap:3px;flex-shrink:0;"><span class="meal-cal-txt">${m.cal}</span><button class="meal-del" onclick="deleteMeal(${m.idx})">×</button></div></div>`;});html+='</div>';});if(!html)html='<div class="empty-state">Kuch nahi khaya abhi — add karo!</div>';document.getElementById('meals-container').innerHTML=html;}
+function renderMeals(meals){
+  const groups={Breakfast:[],Lunch:[],Dinner:[],Snacks:[],'Fruits & Veg':[]};
+  meals.forEach((m,i)=>{
+    const t = m.type||'Snacks';
+    if(groups[t]!==undefined) groups[t].push({...m,idx:i});
+    else groups['Snacks'].push({...m,idx:i});
+  });
+  const labels={Breakfast:'Nashta',Lunch:'Dopahar',Dinner:'Raat ka Khana',Snacks:'Halka Phulka','Fruits & Veg':'Fruits & Veg'};let html='';Object.keys(groups).forEach(type=>{if(!groups[type].length)return;html+=`<div style="margin-bottom:11px;"><div class="meal-group-title">${type} — ${labels[type]}</div>`;groups[type].forEach(m=>{const isFav=favs.find(f=>f.name===m.name);const badge=m.custom?'<span class="my-food-badge">MY</span>':'';html+=`<div class="meal-item"><div style="flex:1;min-width:0;"><div class="meal-name">${m.name}${badge}<span class="fav-star" onclick="toggleFav('${esc(m.name)}',${m.cal},${m.p||0},${m.c||0},${m.f||0})">${isFav?'⭐':'☆'}</span></div><div class="meal-meta">${m.p||0}g P · ${m.c||0}g C · ${m.f||0}g F${m.sodium?' · '+m.sodium+'mg Na':''}</div></div><div style="display:flex;align-items:center;gap:3px;flex-shrink:0;"><span class="meal-cal-txt">${m.cal}</span><button class="meal-del" onclick="deleteMeal(${m.idx})">×</button></div></div>`;});html+='</div>';});if(!html)html='<div class="empty-state">Kuch nahi khaya abhi — add karo!</div>';document.getElementById('meals-container').innerHTML=html;}
 function deleteMeal(idx){const s=gT();s[TODAY_KEY].meals.splice(idx,1);sS(s);updateUI();}
 function toggleFav(name,cal,p,c,f){const idx=favs.findIndex(fv=>fv.name===name);if(idx>=0)favs.splice(idx,1);else favs.push({name,cal,p,c,f});localStorage.setItem('nf_favs',JSON.stringify(favs));updateUI();}
 function renderWorkouts(workouts){if(!workouts.length){document.getElementById('workout-container').innerHTML='<div class="empty-state">Koi workout nahi — gym gaye? 💪</div>';return;}document.getElementById('workout-container').innerHTML=workouts.map((w,i)=>`<div class="workout-item"><div style="flex:1;"><div class="workout-name">${w.name}<span class="muscle-tag">${w.muscle}</span></div><div class="workout-meta">${w.type}${w.duration?' · '+w.duration+' mins':''}${w.notes?' · '+w.notes:''}</div></div><div style="display:flex;align-items:center;gap:5px;">${w.cal?`<span class="workout-cal-txt">−${w.cal}</span>`:''}<button class="meal-del" onclick="deleteWorkout(${i})">×</button></div></div>`).join('');}
@@ -1230,7 +1273,81 @@ function renderCalDetail(k){const s=gS();const detail=document.getElementById('c
   +'</div>';
   detail.innerHTML='<div class="cal-day-detail"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:13px;font-weight:700;color:#e0e0e0;">'+k+'</div><div style="text-align:right;"><div style="font-size:14px;color:#00e5a0;font-weight:700;">'+totCal+' kcal</div>'+(totBurn?'<div style="font-size:10px;color:#ff5252;">-'+totBurn+' burned</div>':'')+'</div></div>'+goalsHtml+mh+wh+hh+'</div>';
 }
-function renderMyFoods(){const cfs=getCF();document.getElementById('cf-cat-tabs').innerHTML=['All','Breakfast','Lunch','Dinner','Snacks','Fruits & Veg'].map(c=>`<span class="tab-pill${c===cfActiveCat?' active':''}" onclick="cfActiveCat='${c}';renderMyFoods();">${c}</span>`).join('');const q=(document.getElementById('cf-search')||{}).value||'';let foods=cfs;if(cfActiveCat!=='All')foods=foods.filter(f=>f.cat===cfActiveCat);if(q)foods=foods.filter(f=>f.name.toLowerCase().includes(q.toLowerCase()));if(!foods.length){document.getElementById('cf-list').innerHTML=`<div class="empty-state">${cfs.length?'Koi food nahi yahan':'Pehla food add karo!'}</div>`;return;}document.getElementById('cf-list').innerHTML=foods.map(f=>`<div class="cf-item"><div style="display:flex;justify-content:space-between;align-items:flex-start;"><div><div class="cf-name">${f.name}</div><div class="cf-cat">${f.cat}${f.serving?' · '+f.serving:''}</div><div class="cf-macros">${f.p||0}g P · ${f.c||0}g C · ${f.f||0}g F${f.sodium?' · '+f.sodium+'mg Na':''}</div></div><div style="font-size:14px;color:#00e5a0;font-weight:700;">${f.cal} kcal</div></div><div class="cf-actions"><button class="cf-edit-btn" onclick="openAddFoodModal('${f.id}')">Edit</button><button class="cf-del-btn" onclick="deleteCustomFood('${f.id}')">Delete</button></div></div>`).join('');}
+function renderMyFoods(){
+  const cfs = getCF();
+  const cats = ['All','Breakfast','Lunch','Dinner','Snacks','Fruits & Veg'];
+  const tabsEl = document.getElementById('cf-cat-tabs');
+  if(tabsEl){
+    tabsEl.innerHTML = cats.map(cat=>
+      '<span class="tab-pill'+(cat===cfActiveCat?' active':'')+'" onclick="cfActiveCat=\''+cat+'\';renderMyFoods();">'+cat+'</span>'
+    ).join('');
+  }
+  const q = (document.getElementById('cf-search')||{}).value||'';
+  let foods = cfs;
+  if(cfActiveCat !== 'All') foods = foods.filter(f=>f.cat===cfActiveCat);
+  if(q) foods = foods.filter(f=>f.name.toLowerCase().includes(q.toLowerCase()));
+
+  const listEl = document.getElementById('cf-list');
+  if(!listEl) return;
+
+  if(!cfs.length){
+    listEl.innerHTML = '<div class="empty-state">Koi food nahi — pehla food add karo!</div>';
+    return;
+  }
+  if(!foods.length){
+    listEl.innerHTML = '<div class="empty-state">Is category mein koi food nahi</div>';
+    return;
+  }
+
+  // Group by category for better visual organisation
+  if(cfActiveCat === 'All' && !q){
+    const grouped = {};
+    cats.slice(1).forEach(cat=>{ grouped[cat] = []; });
+    cfs.forEach(f=>{ if(grouped[f.cat]) grouped[f.cat].push(f); else grouped['Snacks'].push(f); });
+    let html = '';
+    cats.slice(1).forEach(cat=>{
+      if(!grouped[cat].length) return;
+      const catColor = {Breakfast:'#ffa726',Lunch:'#29b6f6',Dinner:'#b39ddb',Snacks:'#00e5a0','Fruits & Veg':'#66bb6a'}[cat]||'#888';
+      html += '<div style="font-size:10px;font-weight:700;color:'+catColor+';text-transform:uppercase;letter-spacing:1px;margin:12px 0 6px;">'+cat+'</div>';
+      html += grouped[cat].map(f=>renderCfItem(f)).join('');
+    });
+    listEl.innerHTML = html;
+  } else {
+    listEl.innerHTML = foods.map(f=>renderCfItem(f)).join('');
+  }
+}
+
+function renderCfItem(f){
+  const catColor = {Breakfast:'#ffa726',Lunch:'#29b6f6',Dinner:'#b39ddb',Snacks:'#00e5a0','Fruits & Veg':'#66bb6a'}[f.cat]||'#888';
+  return '<div class="cf-item">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+      +'<div style="flex:1;">'
+        +'<div class="cf-name">'+f.name+'</div>'
+        +'<div style="display:flex;gap:6px;align-items:center;margin-top:3px;">'
+          +'<span style="font-size:9px;background:'+catColor+'22;color:'+catColor+';border:1px solid '+catColor+'44;border-radius:8px;padding:1px 7px;">'+f.cat+'</span>'
+          +(f.serving?'<span class="cf-cat">'+f.serving+'</span>':'')
+        +'</div>'
+        +'<div class="cf-macros">'+(f.p||0)+'g P · '+(f.c||0)+'g C · '+(f.f||0)+'g F'+(f.sodium?' · '+f.sodium+'mg Na':'')+'</div>'
+      +'</div>'
+      +'<div style="font-size:14px;color:var(--neon);font-weight:700;flex-shrink:0;margin-left:8px;">'+f.cal+' kcal</div>'
+    +'</div>'
+    +'<div class="cf-actions">'
+      +'<select onchange="reassignFoodCat(\''+f.id+'\',this.value)" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px 8px;color:var(--text2);font-size:11px;cursor:pointer;font-family:inherit;flex:1;">'
+        +['Breakfast','Lunch','Dinner','Snacks','Fruits & Veg'].map(cat=>'<option value="'+cat+'"'+(cat===f.cat?' selected':'')+'>'+cat+'</option>').join('')
+      +'</select>'
+      +'<button class="cf-edit-btn" onclick="openAddFoodModal(\''+f.id+'\')">Edit</button>'
+      +'<button class="cf-del-btn" onclick="deleteCustomFood(\''+f.id+'\')">Delete</button>'
+    +'</div>'
+  +'</div>';
+}
+
+function reassignFoodCat(id, newCat){
+  const cfs = getCF();
+  const idx = cfs.findIndex(f=>f.id===id);
+  if(idx>=0){ cfs[idx].cat = newCat; setCF(cfs); renderMyFoods(); }
+}
+
+
 function openAddFoodModal(id){cfEditId=id;const af=id?getCF().find(f=>f.id===id):null;document.getElementById('addfood-title').textContent=id?'Food Edit Karo':'New Food Add Karo';document.getElementById('af-save-btn').textContent=id?'Update Food':'Save Food';document.getElementById('af-name').value=af?af.name:'';document.getElementById('af-cat').value=af?af.cat:'Breakfast';document.getElementById('af-serving').value=af?af.serving||'':'';['cal','p','c','f','fiber','sodium','sugar','calcium','iron'].forEach(k=>{document.getElementById('af-'+k).value=af?af[k]||'':'';});document.getElementById('af-preview').style.display='none';document.getElementById('addfood-modal').classList.add('open');}
 function updatePreview(){const name=document.getElementById('af-name').value.trim();const cal=parseInt(document.getElementById('af-cal').value)||0;const p=parseInt(document.getElementById('af-p').value)||0;const c=parseInt(document.getElementById('af-c').value)||0;const f=parseInt(document.getElementById('af-f').value)||0;if(name&&cal){document.getElementById('af-preview').style.display='block';document.getElementById('af-prev-name').textContent=name;document.getElementById('af-prev-cal').textContent=cal+' kcal';document.getElementById('af-prev-macros').textContent=p+'g P · '+c+'g C · '+f+'g F';}else document.getElementById('af-preview').style.display='none';}
 function closeAddFoodModal(){document.getElementById('addfood-modal').classList.remove('open');cfEditId=null;}
@@ -1240,51 +1357,61 @@ function openMealModal(){document.getElementById('meal-modal').classList.add('op
 function closeMealModal(){document.getElementById('meal-modal').classList.remove('open');document.getElementById('food-search').value='';activeCat='All';}
 function renderCatTabs(){document.getElementById('cat-tabs').innerHTML=['All','Breakfast','Lunch','Dinner','Snacks','Fruits & Veg','My Foods'].map(c=>`<span class="tab-pill${c===activeCat?' active':''}" onclick="activeCat='${c}';renderCatTabs();filterFoods();">${c}</span>`).join('');}
 function filterFoods(){
-  const q=document.getElementById('food-search').value.toLowerCase();
-  let foods=getAllFoods();
-  if(activeCat==='My Foods') foods=foods.filter(f=>f.custom);
-  else if(activeCat!=='All') foods=foods.filter(f=>f.cat===activeCat);
-  if(q) foods=foods.filter(f=>f.name.toLowerCase().includes(q));
-  window._currentFoods=foods;
-  if(!foods.length){document.getElementById('food-list').innerHTML='<div class="empty-state">Kuch nahi mila!</div>';return;}
-  document.getElementById('food-list').innerHTML=foods.map(function(f,i){
-    const waterInfo=f.water?' · 💧'+f.water+'%':'';
-    const customBadge=f.custom?'<span class="my-food-badge">MY</span>':'';
-    return '<div class="food-item" style="flex-direction:column;align-items:stretch;gap:7px;">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;">'
-        +'<div style="flex:1;min-width:0;"><div style="font-size:13px;color:#e0e0e0;font-weight:500;">'+f.name+customBadge+'</div>'
-        +'<div style="font-size:10px;color:#777;">'+(f.p||0)+'g P · '+(f.c||0)+'g C · '+(f.f||0)+'g F'+(f.serving?' · '+f.serving:'')+waterInfo+'</div></div>'
-        +'<div style="font-size:13px;color:#00e5a0;font-weight:600;margin-left:8px;">'+f.cal+' kcal</div>'
+  const q = document.getElementById('food-search').value.toLowerCase();
+  let foods = getAllFoods();
+  if(activeCat === 'My Foods') foods = foods.filter(f=>f.custom);
+  else if(activeCat !== 'All') foods = foods.filter(f=>f.cat===activeCat);
+  if(q) foods = foods.filter(f=>f.name.toLowerCase().includes(q));
+  window._currentFoods = foods;
+
+  if(!foods.length){
+    document.getElementById('food-list').innerHTML = '<div class="empty-state">Kuch nahi mila!</div>';
+    return;
+  }
+
+  // If My Foods tab active and no search, group by category
+  if(activeCat === 'My Foods' && !q){
+    const cats = ['Breakfast','Lunch','Dinner','Snacks','Fruits & Veg'];
+    const grouped = {};
+    cats.forEach(cat=>{ grouped[cat] = []; });
+    foods.forEach((f,i)=>{ 
+      window._currentFoods[i] = f; // keep global index intact
+      if(grouped[f.cat]) grouped[f.cat].push({f,i});
+      else grouped['Snacks'].push({f,i});
+    });
+    const catColor = {Breakfast:'#ffa726',Lunch:'#29b6f6',Dinner:'#b39ddb',Snacks:'#00e5a0','Fruits & Veg':'#66bb6a'};
+    let html = '';
+    cats.forEach(cat=>{
+      if(!grouped[cat].length) return;
+      html += '<div style="font-size:10px;font-weight:700;color:'+catColor[cat]+';text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;">'+cat+'</div>';
+      html += grouped[cat].map(({f,i})=>renderFoodItem(f,i)).join('');
+    });
+    document.getElementById('food-list').innerHTML = html;
+  } else {
+    document.getElementById('food-list').innerHTML = foods.map((f,i)=>renderFoodItem(f,i)).join('');
+  }
+}
+
+function renderFoodItem(f, i){
+  const waterInfo = f.water ? ' · 💧'+f.water+'%' : '';
+  const customBadge = f.custom ? '<span class="my-food-badge">MY</span>' : '';
+  return '<div class="food-item" style="flex-direction:column;align-items:stretch;gap:7px;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;">'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:13px;color:var(--text);font-weight:500;">'+f.name+customBadge+'</div>'
+        +'<div style="font-size:10px;color:var(--text3);">'+(f.p||0)+'g P · '+(f.c||0)+'g C · '+(f.f||0)+'g F'+(f.serving?' · '+f.serving:'')+waterInfo+'</div>'
       +'</div>'
-      +'<div style="display:flex;gap:7px;align-items:center;">'
-        +'<div style="font-size:10px;color:#777;flex-shrink:0;">Servings:</div>'
-        +'<input type="number" value="1" min="0.1" step="0.1" id="srv'+i+'" onclick="event.stopPropagation()" style="width:55px;background:#0d0d0f;border:1px solid #2a2a35;border-radius:7px;padding:4px 7px;color:#f0f0f0;font-size:12px;">'
-        +'<button onclick="addByIndex('+i+')" style="background:#00e5a0;color:#0d0d0f;border:none;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">+ Add</button>'
-      +'</div>'
-    +'</div>';
-  }).join('');
+      +'<div style="font-size:13px;color:var(--neon);font-weight:700;margin-left:8px;">'+f.cal+' kcal</div>'
+    +'</div>'
+    +'<div style="display:flex;gap:7px;align-items:center;">'
+      +'<div style="font-size:10px;color:var(--text3);flex-shrink:0;">Servings:</div>'
+      +'<input type="number" value="1" min="0.1" step="0.1" id="srv'+i+'" onclick="event.stopPropagation()" style="width:55px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:4px 7px;color:var(--text);font-size:12px;">'
+      +'<button onclick="addByIndex('+i+')" style="background:linear-gradient(135deg,var(--neon),var(--neon2));color:#000;border:none;border-radius:9px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex:1;">+ Add</button>'
+    +'</div>'
+  +'</div>';
 }
 
 
-function addFoodToLog(name,cal,p,cf,f,fiber,sodium,sugar,calcium,iron,custom){
-  const type=document.getElementById('meal-type-sel').value;
-  const s=gT();
-  s[TODAY_KEY].meals.push({
-    name:name,
-    cal:Math.round((cal||0)*10)/10,
-    p:Math.round((p||0)*10)/10,
-    c:Math.round((cf||0)*10)/10,
-    f:Math.round((f||0)*10)/10,
-    fiber:Math.round((fiber||0)*10)/10,
-    sodium:Math.round(sodium||0),
-    sugar:Math.round((sugar||0)*10)/10,
-    calcium:Math.round(calcium||0),
-    iron:Math.round((iron||0)*10)/10,
-    type:type,
-    custom:custom||false
-  });
-  sS(s);updateUI();closeMealModal();
-}
 function addByIndex(i){
   const f=window._currentFoods[i];
   if(!f)return;
@@ -1302,6 +1429,91 @@ function saveGoal(){const v=parseInt(document.getElementById('goal-input').value
 
 
 
+
+
+// ===== MICRONUTRIENT GOALS =====
+function openMicroGoalsModal(){
+  const mt = getMicroTargets();
+  document.getElementById('mg-sodium').value = mt.sodium||'';
+  document.getElementById('mg-sugar').value = mt.sugar||'';
+  document.getElementById('mg-fiber').value = mt.fiber||'';
+  document.getElementById('mg-calcium').value = mt.calcium||'';
+  document.getElementById('mg-iron').value = mt.iron||'';
+  document.getElementById('micro-modal').classList.add('open');
+}
+function closeMicroModal(){ document.getElementById('micro-modal').classList.remove('open'); }
+function saveMicroGoals(){
+  const goals = {
+    sodium: parseInt(document.getElementById('mg-sodium').value)||2300,
+    sugar:  parseInt(document.getElementById('mg-sugar').value)||50,
+    fiber:  parseInt(document.getElementById('mg-fiber').value)||30,
+    calcium:parseInt(document.getElementById('mg-calcium').value)||1000,
+    iron:   parseInt(document.getElementById('mg-iron').value)||18,
+  };
+  localStorage.setItem('vf_micro_goals', JSON.stringify(goals));
+  closeMicroModal();
+  updateUI();
+}
+function resetMicroGoals(){
+  localStorage.removeItem('vf_micro_goals');
+  closeMicroModal();
+  updateUI();
+}
+// ===== MONTHLY RANK DROP =====
+function checkMonthlyRankDrop(){
+  const p = getProfile();
+  if(!p.name) return; // no profile = skip
+  const startDate = localStorage.getItem('vf_start_date');
+  const today = TODAY_KEY;
+  if(!startDate){
+    localStorage.setItem('vf_start_date', today);
+    return;
+  }
+  // Check if today is the monthly anniversary
+  const start = new Date(startDate);
+  const now = new Date(today);
+  const lastCheck = localStorage.getItem('vf_monthly_check');
+  if(lastCheck === today) return; // already checked today
+  // Same day of month as start date?
+  if(now.getDate() === start.getDate() && 
+     (now.getMonth() > start.getMonth() || now.getFullYear() > start.getFullYear())){
+    localStorage.setItem('vf_monthly_check', today);
+    const pts = getPoints();
+    const currentRank = getRank(pts);
+    const rankIdx = RANKS.indexOf(currentRank);
+    if(rankIdx <= 0){
+      // Already at Bronze - no drop, show encouragement
+      console.log('Already at Bronze - no drop');
+      setTimeout(()=>{
+        showRankNotification('🛡️ Rank Protected!', 'Already at Bronze — lowest rank. Keep earning points!', '#cd7f32');
+      }, 2000);
+      return;
+    }
+    // Drop 2 ranks (or to Bronze if less than 2 ranks above)
+    const dropTo = Math.max(0, rankIdx - 2);
+    const newRank = RANKS[dropTo];
+    // Set points to just at new rank minimum
+    const newPts = newRank.min;
+    localStorage.setItem('nf_pts', newPts);
+    updateRankBadge();
+    setTimeout(()=>{
+      showRankNotification(
+        '📅 Monthly Reset!',
+        'Rank dropped to ' + newRank.icon + ' ' + newRank.name + '. Stay active to climb back up!',
+        newRank.color
+      );
+    }, 2000);
+  }
+}
+
+function showRankNotification(title, msg, color){
+  const notif = document.createElement('div');
+  notif.style.cssText = 'position:fixed;top:20px;left:16px;right:16px;background:rgba(13,13,24,0.95);border:1px solid '+color+'44;border-radius:14px;padding:14px 16px;z-index:999;backdrop-filter:blur(10px);animation:fadeUp 0.3s ease;';
+  notif.innerHTML = '<div style="font-size:13px;font-weight:700;color:'+color+';margin-bottom:4px;">'+title+'</div>'
+    +'<div style="font-size:12px;color:var(--text2);">'+msg+'</div>';
+  document.body.appendChild(notif);
+  setTimeout(()=>{ notif.style.opacity='0'; notif.style.transition='opacity 0.5s'; setTimeout(()=>notif.remove(), 500); }, 4000);
+}
 // ===== ANALYTICS =====
 let analyticsPeriod = 7;
 
@@ -1970,13 +2182,19 @@ function updateMacroDisplays(tP,tCa,tF){
 
 // ===== POINTS & RANK SYSTEM =====
 const RANKS = [
-  {name:'Bronze', icon:'🥉', color:'#cd7f32', min:0, max:99},
-  {name:'Silver', icon:'🥈', color:'#c0c0c0', min:100, max:299},
-  {name:'Gold', icon:'🥇', color:'#ffd700', min:300, max:599},
-  {name:'Ruby', icon:'💎', color:'#e91e63', min:600, max:999},
-  {name:'Diamond', icon:'💠', color:'#29b6f6', min:1000, max:1999},
-  {name:'Emerald', icon:'💚', color:'#00e5a0', min:2000, max:Infinity},
+  {name:'Bronze',   icon:'🥉', color:'#cd7f32', min:0,    max:499},
+  {name:'Silver',   icon:'🥈', color:'#c0c0c0', min:500,  max:1499},
+  {name:'Gold',     icon:'🥇', color:'#ffd700', min:1500, max:3499},
+  {name:'Ruby',     icon:'💎', color:'#e91e63', min:3500, max:6999},
+  {name:'Diamond',  icon:'💠', color:'#29b6f6', min:7000, max:14999},
+  {name:'Emerald',  icon:'💚', color:'#00e5a0', min:15000,max:Infinity},
 ];
+// Points per day breakdown (max ~40pts/day if perfect):
+// Cal+Water goal = 10pts
+// Each good habit done = 5pts (max ~25pts for 5 habits)
+// Each bad habit maintained = 5pts
+// So Bronze->Silver needs ~50 days of decent logging
+// Silver->Gold needs ~200 days — truly earned!
 
 function getPoints(){return parseInt(localStorage.getItem('nf_pts')||'0');}
 function addPoints(n){const cur=getPoints();localStorage.setItem('nf_pts',cur+n);updateRankBadge();}
@@ -2322,7 +2540,7 @@ function updateMascot(cal,wml){
   if(cd)cd.style.borderColor=mascot.color+'44';
 }
 document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
-setWMode(wMode);updateUI();renderWaterGlass(gT()[TODAY_KEY].waterMl||0);renderProfile();updateRankBadge();renderHabitHomeCard();
+setWMode(wMode);updateUI();renderWaterGlass(gT()[TODAY_KEY].waterMl||0);renderProfile();updateRankBadge();renderHabitHomeCard();checkMonthlyRankDrop();
 </script>
 
 <script>
