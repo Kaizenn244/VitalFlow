@@ -1412,6 +1412,45 @@ function renderFoodItem(f, i){
 }
 
 
+
+
+function addCustomFood(){
+  const name = document.getElementById('custom-name').value.trim();
+  const cal = parseFloat(document.getElementById('custom-cal').value)||0;
+  const p = parseFloat(document.getElementById('custom-protein').value)||0;
+  const cf = parseFloat(document.getElementById('custom-carbs').value)||0;
+  const f = parseFloat(document.getElementById('custom-fats').value)||0;
+  if(!name){ alert('Naam dalo!'); return; }
+  if(!cal){ alert('Calories dalo!'); return; }
+  addFoodToLog(name, cal, p, cf, f, 0, 0, 0, 0, 0, true);
+  ['custom-name','custom-cal','custom-protein','custom-carbs','custom-fats'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+}
+
+function addFoodToLog(name,cal,p,cf,f,fiber,sodium,sugar,calcium,iron,custom){
+  const type = document.getElementById('meal-type-sel').value;
+  const s = gT();
+  s[TODAY_KEY].meals.push({
+    name:name,
+    cal:Math.round((cal||0)*10)/10,
+    p:Math.round((p||0)*10)/10,
+    c:Math.round((cf||0)*10)/10,
+    f:Math.round((f||0)*10)/10,
+    fiber:Math.round((fiber||0)*10)/10,
+    sodium:Math.round(sodium||0),
+    sugar:Math.round((sugar||0)*10)/10,
+    calcium:Math.round(calcium||0),
+    iron:Math.round((iron||0)*10)/10,
+    type:type,
+    custom:custom||false
+  });
+  sS(s);
+  updateUI();
+  closeMealModal();
+}
+
 function addByIndex(i){
   const f=window._currentFoods[i];
   if(!f)return;
