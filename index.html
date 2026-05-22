@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2604,5 +2605,3230 @@ window.__showInstall=function(){
   }
 };
 </script>
-</body>
+
+<!-- VITALFLOW_UI_HABIT_V3 -->
+<style>
+  #hab-day-picker .tab-pill.active {
+    background: linear-gradient(135deg, rgba(0,229,160,0.2), rgba(0,180,216,0.18));
+    color: #00e5a0;
+    border-color: rgba(0,229,160,0.45);
+    font-weight: 700;
+  }
+  .energy-card {
+    background: linear-gradient(135deg, rgba(0,229,160,0.055), rgba(0,180,216,0.035), rgba(124,58,237,0.045));
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 12px 14px;
+    margin: 8px 0;
+    backdrop-filter: blur(10px);
+  }
+  .energy-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .energy-title {
+    font-size: 12px;
+    color: var(--text2);
+    font-weight: 700;
+  }
+  .energy-balance {
+    font-size: 18px;
+    color: var(--neon);
+    font-weight: 800;
+  }
+  .energy-meter {
+    height: 7px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .energy-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--neon), var(--neon2));
+    border-radius: 999px;
+    transition: width 0.45s ease;
+  }
+  .energy-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .energy-stat {
+    background: rgba(0,0,0,0.14);
+    border: 1px solid rgba(255,255,255,0.055);
+    border-radius: 11px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+  .energy-stat-val {
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .energy-stat-lbl {
+    font-size: 9px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var vfDays = [];
+  var vfType = 'good';
+  var vfSeverity = 'normal';
+  var vfEditId = null;
+
+  function habits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function saveHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function logs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function saveLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function todayKey(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function penalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -penalty(h);
+    return 0;
+  }
+  function addPts(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+
+  function ensureDayPicker(){
+    var desc = document.getElementById('hab-desc');
+    if(!desc || document.getElementById('hab-day-picker')) return;
+    desc.insertAdjacentHTML('afterend',
+      '<div style="font-size:10px;color:#555;margin-bottom:5px;">Select days for this habit:</div>' +
+      '<div id="hab-day-picker" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">' +
+        DAYS.map(function(d,i){ return '<span class="tab-pill" data-hday="'+i+'">'+d+'</span>'; }).join('') +
+      '</div>' +
+      '<div style="font-size:10px;color:#666;margin:-2px 0 10px;">Days per week updates automatically from selected days. Leave blank for every day.</div>'
+    );
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        var d = parseInt(btn.dataset.hday, 10);
+        vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+        vfDays.sort(function(a,b){ return a-b; });
+        syncDaysToInput();
+        paintDays();
+      };
+    });
+  }
+
+  function syncDaysToInput(){
+    var inp = document.getElementById('hab-days');
+    if(inp) inp.value = vfDays.length ? vfDays.length : 7;
+  }
+
+  function paintDays(){
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      var d = parseInt(btn.dataset.hday, 10);
+      btn.classList.toggle('active', vfDays.indexOf(d) >= 0);
+    });
+  }
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    vfType = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+  };
+
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    vfSeverity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    vfEditId = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensureDayPicker();
+    var h = id ? habits().find(function(x){ return x.id === id; }) : null;
+    vfDays = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    vfType = h ? h.type : vfType;
+    vfSeverity = h ? (h.severity || 'normal') : vfSeverity;
+    syncDaysToInput();
+    paintDays();
+  };
+
+  window.toggleHabitDay = function(d){
+    ensureDayPicker();
+    vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+    vfDays.sort(function(a,b){ return a-b; });
+    syncDaysToInput();
+    paintDays();
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = habits();
+    var old = vfEditId ? list.find(function(h){ return h.id === vfEditId; }) : null;
+    var habit = {
+      id: vfEditId || 'h_' + Date.now(),
+      name: name,
+      type: vfType,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: vfDays.length ? vfDays.length : 7,
+      daysOfWeek: vfDays.slice(),
+      pts: parseInt(document.getElementById('hab-pts').value, 10) || 5,
+      severity: vfSeverity || 'normal',
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(vfEditId){
+      var idx = list.findIndex(function(h){ return h.id === vfEditId; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    saveHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    if(typeof renderHabits === 'function') renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var l = logs();
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var ok = type === 'good' ? ['done','skipped'] : ['maintained'];
+    var streak = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var k = d.toISOString().slice(0,10);
+      if(!createdBy(h,k)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var status = (l[k] || {})[id];
+      if(status && ok.indexOf(status) >= 0) streak++;
+      else break;
+      d.setDate(d.getDate()-1);
+    }
+    return streak;
+  };
+
+  function dropRank(h){
+    if(!h || h.severity === 'normal' || typeof RANKS === 'undefined') return;
+    var pts = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    var rank = typeof getRank === 'function' ? getRank(pts) : RANKS[0];
+    var idx = RANKS.indexOf(rank);
+    var nextIdx = Math.max(0, idx - (h.severity === 'serious' ? 2 : 1));
+    if(nextIdx < idx){
+      var nr = RANKS[nextIdx];
+      localStorage.setItem('nf_pts', nr.min);
+      if(typeof updateRankBadge === 'function') updateRankBadge();
+      if(typeof showRankNotification === 'function') showRankNotification('Habit streak broken', h.name + ' reset to 0. Rank dropped to ' + nr.name + '.', nr.color);
+      else alert(h.name + ' streak reset to 0. Rank dropped to ' + nr.name + '.');
+    }
+  }
+
+  window.logHabitToday = function(id,status){
+    var l = logs();
+    var tk = todayKey();
+    if(!l[tk]) l[tk] = {};
+    var prev = l[tk][id];
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPts(-oldImpact);
+      delete l[tk][id];
+      saveLogs(l);
+      renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPts(-oldImpact);
+    l[tk][id] = status;
+    saveLogs(l);
+    addPts(impact(h,status));
+    if((status === 'missed' || status === 'relapsed') && oldStreak > 0) dropRank(h);
+    renderHabits();
+  };
+
+  function renderHabitCard(h, todayLog){
+    var status = todayLog[h.id];
+    var severity = h.severity || 'normal';
+    var streak = window.getHabitStreak(h.id,h.type);
+    var actions = '';
+    if(h.type === 'good'){
+      actions =
+        '<button class="hab-btn hab-done'+(status==='done'?' active':'')+'" data-id="'+h.id+'" data-status="done">Done</button>' +
+        '<button class="hab-btn hab-miss'+(status==='missed'?' active':'')+'" data-id="'+h.id+'" data-status="missed">Missed</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped">Skip</button>';
+    } else {
+      actions =
+        '<button class="hab-btn hab-done'+(status==='maintained'?' active':'')+'" data-id="'+h.id+'" data-status="maintained" style="flex:2;">Maintained</button>' +
+        '<button class="hab-btn hab-miss'+(status==='relapsed'?' active':'')+'" data-id="'+h.id+'" data-status="relapsed">Relapsed</button>';
+    }
+    return '<div class="habit-card habit-type-'+h.type+'">' +
+      '<div class="habit-header">' +
+        '<div style="flex:1;">' +
+          '<div class="habit-name">'+h.name+' <span class="severity-'+severity+'">'+severity.charAt(0).toUpperCase()+severity.slice(1)+'</span></div>' +
+          (h.desc ? '<div class="habit-desc">'+h.desc+'</div>' : '') +
+          '<div style="font-size:10px;color:#666;margin-top:3px;">'+(h.type==='good'?'+':'')+(h.pts||5)+' pts, -'+penalty(h)+' penalty</div>' +
+          '<div style="font-size:10px;color:#777;margin-top:3px;">Schedule: '+dayLabel(h)+' | '+(h.days||7)+' days/week</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px;">' +
+          '<div class="habit-streak" style="color:'+(h.type==='good'?'#00e5a0':'#ff5252')+';font-size:13px;">'+streak+' days</div>' +
+          '<div style="display:flex;gap:4px;margin-top:6px;">' +
+            '<button data-edit="'+h.id+'" style="background:none;border:none;color:#555;cursor:pointer;font-size:15px;">Edit</button>' +
+            '<button data-del="'+h.id+'" style="background:none;border:none;color:#ff525266;cursor:pointer;font-size:15px;">Del</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="habit-actions">'+actions+'</div>' +
+    '</div>';
+  }
+
+  window.renderHabits = function(){
+    var tk = todayKey();
+    var todayLog = logs()[tk] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,tk) && scheduledOn(h,new Date()); });
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var goodEl = document.getElementById('good-habits-list');
+    var badEl = document.getElementById('bad-habits-list');
+    if(!goodEl || !badEl) return;
+    goodEl.innerHTML = good.length ? good.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits scheduled today</div>';
+    badEl.innerHTML = bad.length ? bad.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No bad habits scheduled today</div>';
+    [goodEl,badEl].forEach(function(el){
+      el.onclick = function(e){
+        var btn = e.target.closest('button');
+        if(!btn) return;
+        if(btn.dataset.status) window.logHabitToday(btn.dataset.id,btn.dataset.status);
+        else if(btn.dataset.edit) window.openAddHabitModal(btn.dataset.edit);
+        else if(btn.dataset.del && typeof deleteHabit === 'function') deleteHabit(btn.dataset.del);
+      };
+    });
+    renderHabitHomeCard();
+  };
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var tk = todayKey();
+    var todayLog = logs()[tk] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,tk) && scheduledOn(h,new Date()); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var done = visible.filter(function(h){ return ['done','skipped','maintained'].indexOf(todayLog[h.id]) >= 0; }).length;
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+visible.length+' done</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        visible.map(function(h){
+          var st = todayLog[h.id];
+          var ok = ['done','skipped','maintained'].indexOf(st) >= 0;
+          var bad = ['missed','relapsed'].indexOf(st) >= 0;
+          var color = ok ? '#00e5a0' : bad ? '#ff5252' : '#777';
+          return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:6px 10px;font-size:11px;background:rgba(255,255,255,0.03);">'+h.name+' - '+window.getHabitStreak(h.id,h.type)+'d</div>';
+        }).join('') +
+      '</div>';
+  };
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    upgradeEnergyBalance();
+  };
+
+  function upgradeEnergyBalance(){
+    var net = document.getElementById('net-bar');
+    if(!net) return;
+    var eaten = parseInt((document.getElementById('net-eaten') || {}).textContent || '0',10) || 0;
+    var burned = parseInt(((document.getElementById('net-burned') || {}).textContent || '0').replace('-',''),10) || 0;
+    var balance = parseInt((document.getElementById('net-total') || {}).textContent || (eaten-burned),10) || 0;
+    var goal = typeof calGoal !== 'undefined' ? calGoal : parseInt(localStorage.getItem('nf_goal') || '2500',10);
+    var pct = Math.max(0, Math.min(100, Math.round(balance / goal * 100)));
+    net.className = 'energy-card';
+    net.style.display = burned > 0 ? 'block' : 'none';
+    net.innerHTML =
+      '<div class="energy-top">' +
+        '<div><div class="energy-title">Energy Balance</div><div style="font-size:10px;color:var(--text3);margin-top:2px;">Workout calories are already counted here</div></div>' +
+        '<div class="energy-balance">'+balance+' kcal</div>' +
+      '</div>' +
+      '<div class="energy-meter"><div class="energy-fill" style="width:'+pct+'%;"></div></div>' +
+      '<div class="energy-stats">' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--neon);">'+eaten+'</div><div class="energy-stat-lbl">Food</div></div>' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--red);">'+burned+'</div><div class="energy-stat-lbl">Workout</div></div>' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--orange);">'+Math.max(0,goal-balance)+'</div><div class="energy-stat-lbl">Left</div></div>' +
+      '</div>';
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureDayPicker();
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+    if(typeof updateUI === 'function') updateUI();
+  });
+})();
+</script>
+<!-- VITALFLOW_HABIT_V4 -->
+<style>
+  .vf-icon-btn {
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: var(--text2);
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .vf-icon-btn.delete {
+    color: var(--red);
+    border-color: rgba(255,77,109,0.18);
+    background: rgba(255,77,109,0.06);
+  }
+  .vf-streak-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(255,159,28,0.26);
+    background: rgba(255,159,28,0.1);
+    color: var(--orange);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var vfDays = [];
+  var vfType = 'good';
+  var vfSeverity = 'normal';
+  var vfEditId = null;
+
+  function tk(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function habits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function saveHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function logs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function saveLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function penalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -penalty(h);
+    return 0;
+  }
+  function addPts(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+  function setHabitById(habit){
+    var list = habits();
+    var idx = list.findIndex(function(h){ return h.id === habit.id; });
+    if(idx >= 0) list[idx] = habit;
+    else list.push(habit);
+    saveHabits(list);
+  }
+
+  function ensurePicker(){
+    var desc = document.getElementById('hab-desc');
+    if(!desc) return;
+    if(!document.getElementById('hab-day-picker')){
+      desc.insertAdjacentHTML('afterend',
+        '<div style="font-size:10px;color:#555;margin-bottom:5px;">Select days for this habit:</div>' +
+        '<div id="hab-day-picker" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">' +
+          DAYS.map(function(d,i){ return '<span class="tab-pill" data-hday="'+i+'">'+d+'</span>'; }).join('') +
+        '</div>' +
+        '<div style="font-size:10px;color:#666;margin:-2px 0 10px;">Days per week updates automatically. Leave all unselected for every day.</div>'
+      );
+    }
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        var d = parseInt(btn.dataset.hday, 10);
+        vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+        vfDays.sort(function(a,b){ return a-b; });
+        syncDays();
+      };
+    });
+    syncDays();
+  }
+
+  function syncDays(){
+    var inp = document.getElementById('hab-days');
+    if(inp) inp.value = vfDays.length ? vfDays.length : 7;
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      var d = parseInt(btn.dataset.hday, 10);
+      btn.classList.toggle('active', vfDays.indexOf(d) >= 0);
+    });
+  }
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    vfType = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+  };
+
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    vfSeverity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    vfEditId = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensurePicker();
+    var h = id ? habits().find(function(x){ return x.id === id; }) : null;
+    vfDays = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    vfType = h ? h.type : 'good';
+    vfSeverity = h ? (h.severity || 'normal') : 'normal';
+    syncDays();
+  };
+
+  window.toggleHabitDay = function(d){
+    ensurePicker();
+    vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+    vfDays.sort(function(a,b){ return a-b; });
+    syncDays();
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = habits();
+    var old = vfEditId ? list.find(function(h){ return h.id === vfEditId; }) : null;
+    var habit = {
+      id: vfEditId || 'h_' + Date.now(),
+      name: name,
+      type: vfType,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: vfDays.length ? vfDays.length : 7,
+      daysOfWeek: vfDays.slice(),
+      pts: parseInt(document.getElementById('hab-pts').value, 10) || 5,
+      severity: vfSeverity || 'normal',
+      streakPenalty: old && old.streakPenalty ? old.streakPenalty : 0,
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(vfEditId){
+      var idx = list.findIndex(function(h){ return h.id === vfEditId; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    saveHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var l = logs();
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var ok = type === 'good' ? ['done'] : ['maintained'];
+    var pause = ['skipped','paused'];
+    var count = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var key = d.toISOString().slice(0,10);
+      if(!createdBy(h,key)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var status = (l[key] || {})[id];
+      if(status && pause.indexOf(status) >= 0){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+      if(status && ok.indexOf(status) >= 0) count++;
+      else break;
+      d.setDate(d.getDate()-1);
+    }
+    return Math.max(0, count - (h.streakPenalty || 0));
+  };
+
+  function applyModerateRelapse(h, oldStreak){
+    var cut = oldStreak < 7 ? 4 : oldStreak > 21 ? 8 : 6;
+    h.streakPenalty = (h.streakPenalty || 0) + cut;
+    setHabitById(h);
+  }
+
+  function dropRankIfSerious(h){
+    if(!h || h.severity !== 'serious' || typeof RANKS === 'undefined') return;
+    var pts = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    var rank = typeof getRank === 'function' ? getRank(pts) : RANKS[0];
+    var idx = RANKS.indexOf(rank);
+    var nextIdx = Math.max(0, idx - 2);
+    if(nextIdx < idx){
+      var nr = RANKS[nextIdx];
+      localStorage.setItem('nf_pts', nr.min);
+      if(typeof updateRankBadge === 'function') updateRankBadge();
+      if(typeof showRankNotification === 'function') showRankNotification('Habit streak broken', h.name + ' reset to 0. Rank dropped to ' + nr.name + '.', nr.color);
+      else alert(h.name + ' streak reset to 0. Rank dropped to ' + nr.name + '.');
+    }
+  }
+
+  window.logHabitToday = function(id,status){
+    var l = logs();
+    var key = tk();
+    if(!l[key]) l[key] = {};
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    var prev = l[key][id];
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPts(-oldImpact);
+      delete l[key][id];
+      saveLogs(l);
+      renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPts(-oldImpact);
+    l[key][id] = status;
+    saveLogs(l);
+    addPts(impact(h,status));
+
+    if(status === 'relapsed' && h.type === 'bad'){
+      if(h.severity === 'moderate') applyModerateRelapse(h, oldStreak);
+      if(h.severity === 'serious') dropRankIfSerious(h);
+    }
+    if(status === 'missed' && h.type === 'good' && h.severity === 'serious') dropRankIfSerious(h);
+    renderHabits();
+  };
+
+  function renderHabitCard(h, todayLog){
+    var status = todayLog[h.id];
+    var severity = h.severity || 'normal';
+    var streak = window.getHabitStreak(h.id,h.type);
+    var actions = '';
+    if(h.type === 'good'){
+      actions =
+        '<button class="hab-btn hab-done'+(status==='done'?' active':'')+'" data-id="'+h.id+'" data-status="done">&#10003; Done</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped">&#9208; Pause</button>' +
+        '<button class="hab-btn hab-miss'+(status==='missed'?' active':'')+'" data-id="'+h.id+'" data-status="missed">&#10007; Missed</button>';
+    } else {
+      actions =
+        '<button class="hab-btn hab-done'+(status==='maintained'?' active':'')+'" data-id="'+h.id+'" data-status="maintained" style="flex:2;">&#10003; Maintained</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped">&#9208; Pause</button>' +
+        '<button class="hab-btn hab-miss'+(status==='relapsed'?' active':'')+'" data-id="'+h.id+'" data-status="relapsed">&#10007; Relapsed</button>';
+    }
+    return '<div class="habit-card habit-type-'+h.type+'">' +
+      '<div class="habit-header">' +
+        '<div style="flex:1;">' +
+          '<div class="habit-name">'+h.name+' <span class="severity-'+severity+'">'+severity.charAt(0).toUpperCase()+severity.slice(1)+'</span></div>' +
+          (h.desc ? '<div class="habit-desc">'+h.desc+'</div>' : '') +
+          '<div style="font-size:10px;color:#666;margin-top:3px;">+'+(h.pts||5)+' pts, -'+penalty(h)+' penalty</div>' +
+          '<div style="font-size:10px;color:#777;margin-top:3px;">Schedule: '+dayLabel(h)+' | '+(h.days||7)+' days/week</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px;">' +
+          '<div class="vf-streak-chip">&#128293; '+streak+' day'+(streak===1?'':'s')+'</div>' +
+          '<div style="display:flex;gap:5px;justify-content:flex-end;margin-top:8px;">' +
+            '<button class="vf-icon-btn" data-edit="'+h.id+'" title="Edit">&#9999;</button>' +
+            '<button class="vf-icon-btn delete" data-del="'+h.id+'" title="Delete">&#128465;</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="habit-actions">'+actions+'</div>' +
+    '</div>';
+  }
+
+  window.renderHabits = function(){
+    var key = tk();
+    var todayLog = logs()[key] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var goodEl = document.getElementById('good-habits-list');
+    var badEl = document.getElementById('bad-habits-list');
+    if(!goodEl || !badEl) return;
+    goodEl.innerHTML = good.length ? good.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits scheduled today</div>';
+    badEl.innerHTML = bad.length ? bad.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No bad habits scheduled today</div>';
+    [goodEl,badEl].forEach(function(el){
+      el.onclick = function(e){
+        var btn = e.target.closest('button');
+        if(!btn) return;
+        if(btn.dataset.status) window.logHabitToday(btn.dataset.id,btn.dataset.status);
+        else if(btn.dataset.edit) window.openAddHabitModal(btn.dataset.edit);
+        else if(btn.dataset.del && typeof deleteHabit === 'function') deleteHabit(btn.dataset.del);
+      };
+    });
+    renderHabitHomeCard();
+  };
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var key = tk();
+    var todayLog = logs()[key] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var done = visible.filter(function(h){ return ['done','maintained'].indexOf(todayLog[h.id]) >= 0; }).length;
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+visible.length+' done</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        visible.map(function(h){
+          var st = todayLog[h.id];
+          var ok = ['done','maintained'].indexOf(st) >= 0;
+          var paused = st === 'skipped' || st === 'paused';
+          var bad = ['missed','relapsed'].indexOf(st) >= 0;
+          var color = ok ? '#00e5a0' : paused ? '#ffa726' : bad ? '#ff5252' : '#777';
+          return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:6px 10px;font-size:11px;background:rgba(255,255,255,0.03);font-weight:700;">'+h.name+' <span style="color:#ffa726;">&#128293; '+window.getHabitStreak(h.id,h.type)+'</span></div>';
+        }).join('') +
+      '</div>';
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensurePicker();
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  });
+})();
+</script>
+<!-- VITALFLOW_HABIT_V4 -->
+<style>
+  .vf-icon-btn {
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: var(--text2);
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .vf-icon-btn.delete {
+    color: var(--red);
+    border-color: rgba(255,77,109,0.18);
+    background: rgba(255,77,109,0.06);
+  }
+  .vf-streak-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(255,159,28,0.26);
+    background: rgba(255,159,28,0.1);
+    color: var(--orange);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var vfDays = [];
+  var vfType = 'good';
+  var vfSeverity = 'normal';
+  var vfEditId = null;
+
+  function tk(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function habits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function saveHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function logs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function saveLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function penalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -penalty(h);
+    return 0;
+  }
+  function addPts(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+  function setHabitById(habit){
+    var list = habits();
+    var idx = list.findIndex(function(h){ return h.id === habit.id; });
+    if(idx >= 0) list[idx] = habit;
+    else list.push(habit);
+    saveHabits(list);
+  }
+
+  function ensurePicker(){
+    var desc = document.getElementById('hab-desc');
+    if(!desc) return;
+    if(!document.getElementById('hab-day-picker')){
+      desc.insertAdjacentHTML('afterend',
+        '<div style="font-size:10px;color:#555;margin-bottom:5px;">Select days for this habit:</div>' +
+        '<div id="hab-day-picker" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">' +
+          DAYS.map(function(d,i){ return '<span class="tab-pill" data-hday="'+i+'">'+d+'</span>'; }).join('') +
+        '</div>' +
+        '<div style="font-size:10px;color:#666;margin:-2px 0 10px;">Days per week updates automatically. Leave all unselected for every day.</div>'
+      );
+    }
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        var d = parseInt(btn.dataset.hday, 10);
+        vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+        vfDays.sort(function(a,b){ return a-b; });
+        syncDays();
+      };
+    });
+    syncDays();
+  }
+
+  function syncDays(){
+    var inp = document.getElementById('hab-days');
+    if(inp) inp.value = vfDays.length ? vfDays.length : 7;
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      var d = parseInt(btn.dataset.hday, 10);
+      btn.classList.toggle('active', vfDays.indexOf(d) >= 0);
+    });
+  }
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    vfType = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+  };
+
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    vfSeverity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    vfEditId = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensurePicker();
+    var h = id ? habits().find(function(x){ return x.id === id; }) : null;
+    vfDays = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    vfType = h ? h.type : 'good';
+    vfSeverity = h ? (h.severity || 'normal') : 'normal';
+    syncDays();
+  };
+
+  window.toggleHabitDay = function(d){
+    ensurePicker();
+    vfDays = vfDays.indexOf(d) >= 0 ? vfDays.filter(function(x){ return x !== d; }) : vfDays.concat(d);
+    vfDays.sort(function(a,b){ return a-b; });
+    syncDays();
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = habits();
+    var old = vfEditId ? list.find(function(h){ return h.id === vfEditId; }) : null;
+    var habit = {
+      id: vfEditId || 'h_' + Date.now(),
+      name: name,
+      type: vfType,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: vfDays.length ? vfDays.length : 7,
+      daysOfWeek: vfDays.slice(),
+      pts: parseInt(document.getElementById('hab-pts').value, 10) || 5,
+      severity: vfSeverity || 'normal',
+      streakPenalty: old && old.streakPenalty ? old.streakPenalty : 0,
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(vfEditId){
+      var idx = list.findIndex(function(h){ return h.id === vfEditId; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    saveHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var l = logs();
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var ok = type === 'good' ? ['done'] : ['maintained'];
+    var pause = ['skipped','paused'];
+    var count = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var key = d.toISOString().slice(0,10);
+      if(!createdBy(h,key)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var status = (l[key] || {})[id];
+      if(status && pause.indexOf(status) >= 0){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+      if(status && ok.indexOf(status) >= 0) count++;
+      else break;
+      d.setDate(d.getDate()-1);
+    }
+    return Math.max(0, count - (h.streakPenalty || 0));
+  };
+
+  function applyModerateRelapse(h, oldStreak){
+    var cut = oldStreak < 7 ? 4 : oldStreak > 21 ? 8 : 6;
+    h.streakPenalty = (h.streakPenalty || 0) + cut;
+    setHabitById(h);
+  }
+
+  function dropRankIfSerious(h){
+    if(!h || h.severity !== 'serious' || typeof RANKS === 'undefined') return;
+    var pts = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    var rank = typeof getRank === 'function' ? getRank(pts) : RANKS[0];
+    var idx = RANKS.indexOf(rank);
+    var nextIdx = Math.max(0, idx - 2);
+    if(nextIdx < idx){
+      var nr = RANKS[nextIdx];
+      localStorage.setItem('nf_pts', nr.min);
+      if(typeof updateRankBadge === 'function') updateRankBadge();
+      if(typeof showRankNotification === 'function') showRankNotification('Habit streak broken', h.name + ' reset to 0. Rank dropped to ' + nr.name + '.', nr.color);
+      else alert(h.name + ' streak reset to 0. Rank dropped to ' + nr.name + '.');
+    }
+  }
+
+  window.logHabitToday = function(id,status){
+    var l = logs();
+    var key = tk();
+    if(!l[key]) l[key] = {};
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    var prev = l[key][id];
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPts(-oldImpact);
+      delete l[key][id];
+      saveLogs(l);
+      renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPts(-oldImpact);
+    l[key][id] = status;
+    saveLogs(l);
+    addPts(impact(h,status));
+
+    if(status === 'relapsed' && h.type === 'bad'){
+      if(h.severity === 'moderate') applyModerateRelapse(h, oldStreak);
+      if(h.severity === 'serious') dropRankIfSerious(h);
+    }
+    if(status === 'missed' && h.type === 'good' && h.severity === 'serious') dropRankIfSerious(h);
+    renderHabits();
+  };
+
+  function renderHabitCard(h, todayLog){
+    var status = todayLog[h.id];
+    var severity = h.severity || 'normal';
+    var streak = window.getHabitStreak(h.id,h.type);
+    var actions = '';
+    if(h.type === 'good'){
+      actions =
+        '<button class="hab-btn hab-done'+(status==='done'?' active':'')+'" data-id="'+h.id+'" data-status="done">&#10003; Done</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped">&#9208; Pause</button>' +
+        '<button class="hab-btn hab-miss'+(status==='missed'?' active':'')+'" data-id="'+h.id+'" data-status="missed">&#10007; Missed</button>';
+    } else {
+      actions =
+        '<button class="hab-btn hab-done'+(status==='maintained'?' active':'')+'" data-id="'+h.id+'" data-status="maintained" style="flex:2;">&#10003; Maintained</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped">&#9208; Pause</button>' +
+        '<button class="hab-btn hab-miss'+(status==='relapsed'?' active':'')+'" data-id="'+h.id+'" data-status="relapsed">&#10007; Relapsed</button>';
+    }
+    return '<div class="habit-card habit-type-'+h.type+'">' +
+      '<div class="habit-header">' +
+        '<div style="flex:1;">' +
+          '<div class="habit-name">'+h.name+' <span class="severity-'+severity+'">'+severity.charAt(0).toUpperCase()+severity.slice(1)+'</span></div>' +
+          (h.desc ? '<div class="habit-desc">'+h.desc+'</div>' : '') +
+          '<div style="font-size:10px;color:#666;margin-top:3px;">+'+(h.pts||5)+' pts, -'+penalty(h)+' penalty</div>' +
+          '<div style="font-size:10px;color:#777;margin-top:3px;">Schedule: '+dayLabel(h)+' | '+(h.days||7)+' days/week</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px;">' +
+          '<div class="vf-streak-chip">&#128293; '+streak+' day'+(streak===1?'':'s')+'</div>' +
+          '<div style="display:flex;gap:5px;justify-content:flex-end;margin-top:8px;">' +
+            '<button class="vf-icon-btn" data-edit="'+h.id+'" title="Edit">&#9999;</button>' +
+            '<button class="vf-icon-btn delete" data-del="'+h.id+'" title="Delete">&#128465;</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="habit-actions">'+actions+'</div>' +
+    '</div>';
+  }
+
+  window.renderHabits = function(){
+    var key = tk();
+    var todayLog = logs()[key] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var goodEl = document.getElementById('good-habits-list');
+    var badEl = document.getElementById('bad-habits-list');
+    if(!goodEl || !badEl) return;
+    goodEl.innerHTML = good.length ? good.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits scheduled today</div>';
+    badEl.innerHTML = bad.length ? bad.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No bad habits scheduled today</div>';
+    [goodEl,badEl].forEach(function(el){
+      el.onclick = function(e){
+        var btn = e.target.closest('button');
+        if(!btn) return;
+        if(btn.dataset.status) window.logHabitToday(btn.dataset.id,btn.dataset.status);
+        else if(btn.dataset.edit) window.openAddHabitModal(btn.dataset.edit);
+        else if(btn.dataset.del && typeof deleteHabit === 'function') deleteHabit(btn.dataset.del);
+      };
+    });
+    renderHabitHomeCard();
+  };
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var key = tk();
+    var todayLog = logs()[key] || {};
+    var visible = habits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var done = visible.filter(function(h){ return ['done','maintained'].indexOf(todayLog[h.id]) >= 0; }).length;
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+visible.length+' done</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        visible.map(function(h){
+          var st = todayLog[h.id];
+          var ok = ['done','maintained'].indexOf(st) >= 0;
+          var paused = st === 'skipped' || st === 'paused';
+          var bad = ['missed','relapsed'].indexOf(st) >= 0;
+          var color = ok ? '#00e5a0' : paused ? '#ffa726' : bad ? '#ff5252' : '#777';
+          return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:6px 10px;font-size:11px;background:rgba(255,255,255,0.03);font-weight:700;">'+h.name+' <span style="color:#ffa726;">&#128293; '+window.getHabitStreak(h.id,h.type)+'</span></div>';
+        }).join('') +
+      '</div>';
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensurePicker();
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  });
+})();
+</script>
+<!-- VITALFLOW_HABIT_V6_PAUSE_FIXED -->
+<style>
+  #hab-day-picker .tab-pill.active {
+    background: linear-gradient(135deg, rgba(0,229,160,0.2), rgba(0,180,216,0.18));
+    color: #00e5a0;
+    border-color: rgba(0,229,160,0.45);
+    font-weight: 700;
+  }
+  .vf-icon-btn {
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: var(--text2);
+    width: 28px;
+    height: 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+  }
+  .vf-icon-btn.delete {
+    color: var(--red);
+    border-color: rgba(255,77,109,0.18);
+    background: rgba(255,77,109,0.06);
+  }
+  .vf-streak-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(255,159,28,0.26);
+    background: rgba(255,159,28,0.1);
+    color: var(--orange);
+    border-radius: 999px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .vf-pause-note {
+    background: rgba(255,159,28,0.08);
+    border: 1px solid rgba(255,159,28,0.22);
+    color: var(--orange);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 10px;
+    line-height: 1.45;
+    margin: 6px 0 10px;
+  }
+  .vf-toast {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: 92px;
+    z-index: 500;
+    background: rgba(13,13,24,0.96);
+    border: 1px solid rgba(255,159,28,0.35);
+    border-radius: 14px;
+    padding: 11px 13px;
+    color: var(--text2);
+    font-size: 12px;
+    line-height: 1.45;
+    box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+    backdrop-filter: blur(14px);
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var PAUSE_COST = 45;
+  var state = {days: [], type: 'good', severity: 'normal', editId: null};
+
+  function today(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function getHabits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function setHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function getLogs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function setLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function pauseLimit(h){ return Math.max(0, Math.min(3, parseInt(h.pauseLimit == null ? 3 : h.pauseLimit, 10) || 0)); }
+  function penalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -penalty(h);
+    if(status === 'skipped' || status === 'paused') return -PAUSE_COST;
+    return 0;
+  }
+  function addPts(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+  function weekStart(date){
+    var d = new Date(date);
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+  }
+  function countPausesThisWeek(id){
+    var l = getLogs();
+    var start = weekStart(new Date());
+    var count = 0;
+    for(var i=0;i<7;i++){
+      var d = new Date(start);
+      d.setDate(start.getDate()+i);
+      var k = d.toISOString().slice(0,10);
+      var s = (l[k] || {})[id];
+      if(s === 'skipped' || s === 'paused') count++;
+    }
+    return count;
+  }
+  function pausesLeft(h){ return Math.max(0, pauseLimit(h) - countPausesThisWeek(h.id)); }
+  function toast(msg){
+    var old = document.querySelector('.vf-toast');
+    if(old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'vf-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function(){
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .35s ease';
+      setTimeout(function(){ if(el.parentNode) el.remove(); }, 380);
+    }, 3300);
+  }
+  function upsertHabit(habit){
+    var list = getHabits();
+    var idx = list.findIndex(function(h){ return h.id === habit.id; });
+    if(idx >= 0) list[idx] = habit;
+    else list.push(habit);
+    setHabits(list);
+  }
+
+  function ensureDayPicker(){
+    var desc = document.getElementById('hab-desc');
+    if(!desc) return;
+    if(!document.getElementById('hab-day-picker')){
+      var html = '<div style="font-size:10px;color:#555;margin-bottom:5px;">Select days for this habit:</div>';
+      html += '<div id="hab-day-picker" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">';
+      DAYS.forEach(function(d,i){ html += '<span class="tab-pill" data-hday="'+i+'">'+d+'</span>'; });
+      html += '</div>';
+      html += '<div style="font-size:10px;color:#666;margin:-2px 0 10px;">Days per week updates automatically. Leave all unselected for every day.</div>';
+      desc.insertAdjacentHTML('afterend', html);
+    }
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        var d = parseInt(btn.dataset.hday, 10);
+        state.days = state.days.indexOf(d) >= 0 ? state.days.filter(function(x){ return x !== d; }) : state.days.concat(d);
+        state.days.sort(function(a,b){ return a-b; });
+        paintDays();
+      };
+    });
+    paintDays();
+  }
+
+  function ensurePauseControl(){
+    var goodOpts = document.getElementById('good-habit-opts');
+    if(!goodOpts || document.getElementById('hab-pause-limit')) return;
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div style="font-size:10px;color:#555;margin-bottom:5px;">Pause allowance per week:</div>' +
+      '<div id="vf-pause-presets" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">' +
+        '<span class="tab-pill" data-pause="0">0 pause</span>' +
+        '<span class="tab-pill" data-pause="1">1 pause</span>' +
+        '<span class="tab-pill" data-pause="2">2 pauses</span>' +
+        '<span class="tab-pill" data-pause="3">3 max</span>' +
+      '</div>' +
+      '<input class="inp" id="hab-pause-limit" type="number" min="0" max="3" placeholder="Pause limit per week, max 3" value="3">' +
+      '<div class="vf-pause-note">Pause keeps your streak alive, but costs 45 rank points. It is only available for good habits.</div>';
+    goodOpts.appendChild(wrap);
+    document.querySelectorAll('#vf-pause-presets .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        document.getElementById('hab-pause-limit').value = btn.dataset.pause;
+      };
+    });
+    document.getElementById('hab-pause-limit').oninput = function(){
+      var n = Math.max(0, Math.min(3, parseInt(this.value || '0', 10)));
+      this.value = n;
+    };
+  }
+
+  function paintDays(){
+    var inp = document.getElementById('hab-days');
+    if(inp) inp.value = state.days.length ? state.days.length : 7;
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      var d = parseInt(btn.dataset.hday, 10);
+      btn.classList.toggle('active', state.days.indexOf(d) >= 0);
+    });
+  }
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    state.type = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+    ensurePauseControl();
+  };
+
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    state.severity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    state.editId = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensureDayPicker();
+    ensurePauseControl();
+    var h = id ? getHabits().find(function(x){ return x.id === id; }) : null;
+    state.days = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    state.type = h ? h.type : 'good';
+    state.severity = h ? (h.severity || 'normal') : 'normal';
+    var pauseInp = document.getElementById('hab-pause-limit');
+    if(pauseInp) pauseInp.value = h ? pauseLimit(h) : 3;
+    paintDays();
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = getHabits();
+    var old = state.editId ? list.find(function(h){ return h.id === state.editId; }) : null;
+    var pauseInp = document.getElementById('hab-pause-limit');
+    var habit = {
+      id: state.editId || 'h_' + Date.now(),
+      name: name,
+      type: state.type,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: state.days.length ? state.days.length : 7,
+      daysOfWeek: state.days.slice(),
+      pts: parseInt(document.getElementById('hab-pts').value, 10) || 5,
+      severity: state.severity || 'normal',
+      pauseLimit: state.type === 'good' ? Math.max(0, Math.min(3, parseInt((pauseInp && pauseInp.value) || '3', 10))) : 0,
+      streakPenalty: old && old.streakPenalty ? old.streakPenalty : 0,
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(state.editId){
+      var idx = list.findIndex(function(h){ return h.id === state.editId; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    setHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var l = getLogs();
+    var h = getHabits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var ok = type === 'good' ? ['done'] : ['maintained'];
+    var count = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var k = d.toISOString().slice(0,10);
+      if(!createdBy(h,k)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var s = (l[k] || {})[id];
+      if((s === 'skipped' || s === 'paused') && h.type === 'good'){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+      if(s && ok.indexOf(s) >= 0) count++;
+      else break;
+      d.setDate(d.getDate()-1);
+    }
+    return Math.max(0, count - (h.streakPenalty || 0));
+  };
+
+  function applyModerateRelapse(h, oldStreak){
+    var cut = oldStreak < 7 ? 4 : oldStreak > 21 ? 8 : 6;
+    h.streakPenalty = (h.streakPenalty || 0) + cut;
+    upsertHabit(h);
+  }
+  function dropRankIfSerious(h){
+    if(!h || h.severity !== 'serious' || typeof RANKS === 'undefined') return;
+    var pts = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    var rank = typeof getRank === 'function' ? getRank(pts) : RANKS[0];
+    var idx = RANKS.indexOf(rank);
+    var nextIdx = Math.max(0, idx - 2);
+    if(nextIdx < idx){
+      var nr = RANKS[nextIdx];
+      localStorage.setItem('nf_pts', nr.min);
+      if(typeof updateRankBadge === 'function') updateRankBadge();
+      if(typeof showRankNotification === 'function') showRankNotification('Habit streak broken', h.name + ' reset to 0. Rank dropped to ' + nr.name + '.', nr.color);
+      else alert(h.name + ' streak reset to 0. Rank dropped to ' + nr.name + '.');
+    }
+  }
+
+  window.logHabitToday = function(id,status){
+    var l = getLogs();
+    var key = today();
+    if(!l[key]) l[key] = {};
+    var h = getHabits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    if((status === 'skipped' || status === 'paused') && h.type !== 'good') return;
+    if((status === 'skipped' || status === 'paused') && l[key][id] !== status && pausesLeft(h) <= 0){
+      toast('No pauses left this week for ' + h.name + '.');
+      return;
+    }
+    var prev = l[key][id];
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPts(-oldImpact);
+      delete l[key][id];
+      setLogs(l);
+      renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPts(-oldImpact);
+    l[key][id] = status;
+    setLogs(l);
+    addPts(impact(h,status));
+    if(status === 'skipped' || status === 'paused') toast('Pause used for ' + h.name + '. Streak is safe, but 45 points were reduced.');
+    if(status === 'relapsed' && h.type === 'bad'){
+      if(h.severity === 'moderate') applyModerateRelapse(h, oldStreak);
+      if(h.severity === 'serious') dropRankIfSerious(h);
+    }
+    if(status === 'missed' && h.type === 'good' && h.severity === 'serious') dropRankIfSerious(h);
+    renderHabits();
+  };
+
+  function renderHabitCard(h,todayLog){
+    var status = todayLog[h.id];
+    var severity = h.severity || 'normal';
+    var streak = window.getHabitStreak(h.id,h.type);
+    var left = pausesLeft(h);
+    var actions = '';
+    if(h.type === 'good'){
+      actions =
+        '<button class="hab-btn hab-done'+(status==='done'?' active':'')+'" data-id="'+h.id+'" data-status="done">&#10003; Done</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped" '+(left<=0 && status!=='skipped'?'style="opacity:.45;"':'')+'>&#9208; Pause ('+left+')</button>' +
+        '<button class="hab-btn hab-miss'+(status==='missed'?' active':'')+'" data-id="'+h.id+'" data-status="missed">&#10007; Missed</button>';
+    } else {
+      actions =
+        '<button class="hab-btn hab-done'+(status==='maintained'?' active':'')+'" data-id="'+h.id+'" data-status="maintained" style="flex:2;">&#10003; Maintained</button>' +
+        '<button class="hab-btn hab-miss'+(status==='relapsed'?' active':'')+'" data-id="'+h.id+'" data-status="relapsed">&#10007; Relapsed</button>';
+    }
+    return '<div class="habit-card habit-type-'+h.type+'">' +
+      '<div class="habit-header">' +
+        '<div style="flex:1;">' +
+          '<div class="habit-name">'+h.name+' <span class="severity-'+severity+'">'+severity.charAt(0).toUpperCase()+severity.slice(1)+'</span></div>' +
+          (h.desc ? '<div class="habit-desc">'+h.desc+'</div>' : '') +
+          '<div style="font-size:10px;color:#666;margin-top:3px;">+'+(h.pts||5)+' pts, -'+penalty(h)+' penalty'+(h.type==='good'?' | Pause: -45 pts':'')+'</div>' +
+          '<div style="font-size:10px;color:#777;margin-top:3px;">Schedule: '+dayLabel(h)+' | '+(h.days||7)+' days/week'+(h.type==='good'?' | Pauses left: '+left+'/'+pauseLimit(h):'')+'</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px;">' +
+          '<div class="vf-streak-chip">&#128293; '+streak+' day'+(streak===1?'':'s')+'</div>' +
+          '<div style="display:flex;gap:5px;justify-content:flex-end;margin-top:8px;">' +
+            '<button class="vf-icon-btn" data-edit="'+h.id+'" title="Edit">&#9999;</button>' +
+            '<button class="vf-icon-btn delete" data-del="'+h.id+'" title="Delete">&#128465;</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="habit-actions">'+actions+'</div>' +
+    '</div>';
+  }
+
+  window.renderHabits = function(){
+    var key = today();
+    var todayLog = getLogs()[key] || {};
+    var visible = getHabits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var goodEl = document.getElementById('good-habits-list');
+    var badEl = document.getElementById('bad-habits-list');
+    if(!goodEl || !badEl) return;
+    goodEl.innerHTML = good.length ? good.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits scheduled today</div>';
+    badEl.innerHTML = bad.length ? bad.map(function(h){ return renderHabitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No bad habits scheduled today</div>';
+    [goodEl,badEl].forEach(function(el){
+      el.onclick = function(e){
+        var btn = e.target.closest('button');
+        if(!btn) return;
+        if(btn.dataset.status) window.logHabitToday(btn.dataset.id,btn.dataset.status);
+        else if(btn.dataset.edit) window.openAddHabitModal(btn.dataset.edit);
+        else if(btn.dataset.del && typeof deleteHabit === 'function') deleteHabit(btn.dataset.del);
+      };
+    });
+    renderHabitHomeCard();
+  };
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var key = today();
+    var todayLog = getLogs()[key] || {};
+    var visible = getHabits().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var done = visible.filter(function(h){ return ['done','maintained'].indexOf(todayLog[h.id]) >= 0; }).length;
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+visible.length+' done</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        visible.map(function(h){
+          var st = todayLog[h.id];
+          var ok = ['done','maintained'].indexOf(st) >= 0;
+          var paused = st === 'skipped' || st === 'paused';
+          var bad = ['missed','relapsed'].indexOf(st) >= 0;
+          var color = ok ? '#00e5a0' : paused ? '#ffa726' : bad ? '#ff5252' : '#777';
+          var pauseText = h.type === 'good' ? ' | Pause '+pausesLeft(h)+'/'+pauseLimit(h) : '';
+          return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:6px 10px;font-size:11px;background:rgba(255,255,255,0.03);font-weight:700;">'+h.name+' <span style="color:#ffa726;">&#128293; '+window.getHabitStreak(h.id,h.type)+'</span>'+pauseText+'</div>';
+        }).join('') +
+      '</div>';
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureDayPicker();
+    ensurePauseControl();
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  });
+})();
+</script>
+<!-- VITALFLOW_UI_V7_PREMIUM_HOME -->
+<style>
+  :root {
+    --vf-bg-deep: #07090d;
+    --vf-bg-panel: rgba(18,21,28,0.72);
+    --vf-bg-panel-2: rgba(13,16,22,0.82);
+    --vf-line: rgba(255,255,255,0.085);
+    --vf-line-strong: rgba(255,255,255,0.13);
+    --vf-soft: rgba(255,255,255,0.035);
+  }
+
+  body {
+    background:
+      linear-gradient(180deg, #07090d 0%, #090b12 45%, #080810 100%) !important;
+  }
+
+  body::before {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background:
+      radial-gradient(circle at 18% 8%, rgba(0,229,160,0.075), transparent 28%),
+      radial-gradient(circle at 92% 12%, rgba(0,180,216,0.055), transparent 24%),
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px) !important;
+    background-size: auto, auto, 36px 36px, 36px 36px !important;
+    opacity: 1 !important;
+  }
+
+  #screen-home {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  #screen-home .header {
+    padding: 22px 8px 12px !important;
+  }
+
+  .app-title {
+    letter-spacing: 0 !important;
+  }
+
+  .streak-badge,
+  #rank-badge,
+  .goal-pill {
+    box-shadow: none !important;
+    backdrop-filter: blur(14px);
+  }
+
+  .card,
+  .macro-card,
+  .meal-item,
+  .workout-item,
+  .habit-card,
+  #mascot-card,
+  .net-bar,
+  .energy-card {
+    background: var(--vf-bg-panel) !important;
+    border-color: var(--vf-line) !important;
+    box-shadow: 0 16px 45px rgba(0,0,0,0.18);
+  }
+
+  .card,
+  .card-gradient,
+  #mascot-card {
+    border-radius: 14px !important;
+  }
+
+  .ring-container {
+    padding: 16px 0 10px !important;
+    margin: 4px 0 6px;
+  }
+
+  .ring-container svg {
+    width: 170px;
+    height: 170px;
+    filter: drop-shadow(0 18px 32px rgba(0,0,0,0.26));
+  }
+
+  .ring-cal {
+    font-size: 32px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .ring-lbl {
+    color: var(--text2) !important;
+    font-size: 10px !important;
+  }
+
+  .ring-sub {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 7px !important;
+    min-width: 84px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,229,160,0.22);
+    background: rgba(0,229,160,0.08);
+    color: var(--neon) !important;
+    font-size: 10px !important;
+    font-weight: 800;
+  }
+
+  .ring-sub.over {
+    border-color: rgba(255,77,109,0.24);
+    background: rgba(255,77,109,0.09);
+    color: var(--red) !important;
+  }
+
+  .macro-grid {
+    gap: 10px !important;
+    margin: 10px 0 9px !important;
+  }
+
+  .macro-card {
+    border-radius: 13px !important;
+    padding: 12px 9px !important;
+  }
+
+  .macro-name {
+    font-size: 10px !important;
+  }
+
+  .macro-val {
+    font-size: 17px !important;
+  }
+
+  #micro-card {
+    overflow: hidden;
+  }
+
+  #micro-card.vf-collapsed #micro-bars {
+    display: none;
+  }
+
+  .vf-micro-toggle {
+    background: rgba(255,255,255,0.055);
+    border: 1px solid rgba(255,255,255,0.09);
+    color: var(--text2);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .energy-card {
+    background: linear-gradient(135deg, rgba(0,229,160,0.07), rgba(0,180,216,0.045), rgba(124,58,237,0.045)) !important;
+    border: 1px solid rgba(0,229,160,0.16) !important;
+    border-radius: 15px !important;
+    padding: 12px 13px !important;
+    margin: 9px 0 !important;
+    box-shadow: 0 16px 42px rgba(0,0,0,0.22);
+  }
+
+  .energy-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 11px;
+  }
+
+  .energy-title {
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 800;
+  }
+
+  .energy-note {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+
+  .energy-balance {
+    font-size: 18px;
+    color: var(--neon);
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .energy-meter {
+    height: 7px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  .energy-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--neon), var(--neon2));
+    transition: width 0.45s ease;
+  }
+
+  .energy-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0,1fr));
+    gap: 8px;
+  }
+
+  .energy-stat {
+    background: rgba(0,0,0,0.16);
+    border: 1px solid rgba(255,255,255,0.055);
+    border-radius: 11px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+
+  .energy-stat-val {
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .energy-stat-lbl {
+    margin-top: 2px;
+    font-size: 9px;
+    color: var(--text3);
+  }
+
+  #habit-home-card {
+    background: linear-gradient(135deg, rgba(0,229,160,0.05), rgba(255,159,28,0.04)) !important;
+    border-color: rgba(255,255,255,0.09) !important;
+  }
+
+  .habit-card {
+    border-radius: 13px !important;
+  }
+
+  .hab-btn {
+    border-radius: 11px !important;
+    min-height: 34px;
+  }
+
+  .section-header {
+    margin-top: 16px !important;
+  }
+
+  @media (min-width: 720px) {
+    #app {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+    .bottom-nav {
+      max-width: 760px;
+      margin: 0 auto;
+      border-left: 1px solid var(--glass-border);
+      border-right: 1px solid var(--glass-border);
+    }
+  }
+</style>
+<script>
+(function(){
+  function qs(id){ return document.getElementById(id); }
+
+  function upgradeMicroCard(){
+    var card = qs('micro-card');
+    if(!card || card.dataset.vfUiReady) return;
+    card.dataset.vfUiReady = '1';
+    card.classList.add('vf-collapsed');
+    var header = card.querySelector('div[style*="justify-content:space-between"]');
+    if(header){
+      var oldBtn = header.querySelector('button');
+      if(oldBtn) oldBtn.textContent = 'Goals';
+      var toggle = document.createElement('button');
+      toggle.className = 'vf-micro-toggle';
+      toggle.textContent = 'Show';
+      toggle.onclick = function(){
+        card.classList.toggle('vf-collapsed');
+        toggle.textContent = card.classList.contains('vf-collapsed') ? 'Show' : 'Hide';
+      };
+      header.appendChild(toggle);
+    }
+  }
+
+  function upgradeCalorieStatus(){
+    var sub = qs('ring-remain');
+    if(!sub) return;
+    var text = sub.textContent || '';
+    sub.classList.toggle('over', text.indexOf('over') >= 0);
+    if(text.indexOf('left') >= 0) sub.textContent = text.replace(' left',' left');
+  }
+
+  function upgradeEnergyBalance(){
+    var net = qs('net-bar');
+    if(!net) return;
+    var eatenEl = qs('net-eaten');
+    var burnedEl = qs('net-burned');
+    var totalEl = qs('net-total');
+    var eaten = parseInt((eatenEl && eatenEl.textContent) || '0',10) || 0;
+    var burned = parseInt(((burnedEl && burnedEl.textContent) || '0').replace('-',''),10) || 0;
+    var balance = parseInt((totalEl && totalEl.textContent) || (eaten-burned),10) || 0;
+    var goal = typeof calGoal !== 'undefined' ? calGoal : parseInt(localStorage.getItem('nf_goal') || '2500',10);
+    if(burned <= 0) return;
+    var left = Math.max(0, goal - balance);
+    var pct = Math.max(0, Math.min(100, Math.round(balance / goal * 100)));
+    net.className = 'energy-card';
+    net.style.display = 'block';
+    net.innerHTML =
+      '<div class="energy-top">' +
+        '<div><div class="energy-title">Energy Balance</div><div class="energy-note">Workout burn is already included</div></div>' +
+        '<div class="energy-balance">'+balance+' kcal</div>' +
+      '</div>' +
+      '<div class="energy-meter"><div class="energy-fill" style="width:'+pct+'%;"></div></div>' +
+      '<div class="energy-stats">' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--neon);">'+eaten+'</div><div class="energy-stat-lbl">Food</div></div>' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--red);">'+burned+'</div><div class="energy-stat-lbl">Workout</div></div>' +
+        '<div class="energy-stat"><div class="energy-stat-val" style="color:var(--orange);">'+left+'</div><div class="energy-stat-lbl">Left</div></div>' +
+      '</div>';
+  }
+
+  function orderHome(){
+    var home = qs('screen-home');
+    var habit = qs('habit-home-card');
+    var water = qs('water-card');
+    var micro = qs('micro-card');
+    var mascot = qs('mascot-card');
+    if(!home || !habit || !water || !micro) return;
+    var mealHeader = Array.prototype.find.call(home.querySelectorAll('.section-header'), function(el){
+      return (el.textContent || '').indexOf('Khana') >= 0;
+    });
+    if(mealHeader && habit.parentNode === home) home.insertBefore(habit, mealHeader);
+    if(habit.nextSibling !== water && water.parentNode === home) home.insertBefore(water, habit.nextSibling);
+    if(micro.parentNode === home && mascot && mascot.parentNode === home) home.insertBefore(micro, mascot.nextSibling);
+  }
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    upgradeMicroCard();
+    upgradeCalorieStatus();
+    upgradeEnergyBalance();
+    orderHome();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setTimeout(function(){
+      upgradeMicroCard();
+      upgradeCalorieStatus();
+      upgradeEnergyBalance();
+      orderHome();
+    }, 60);
+  });
+})();
+</script>
+<!-- VITALFLOW_UI_V8_RESPONSIVE -->
+<style>
+  #screen-home .goal-pill {
+    margin-left: auto !important;
+  }
+
+  #screen-home .header > div:nth-child(3),
+  #screen-home .header > div[style*="margin-top:5px"] {
+    justify-content: space-between !important;
+    gap: 12px !important;
+  }
+
+  @media (min-width: 900px) {
+    #app {
+      max-width: 1180px !important;
+      margin: 0 auto !important;
+      padding-bottom: 96px !important;
+    }
+
+    .bottom-nav {
+      max-width: 1180px !important;
+      left: 50% !important;
+      right: auto !important;
+      transform: translateX(-50%) !important;
+      width: min(1180px, 100%) !important;
+      border-left: 1px solid var(--glass-border);
+      border-right: 1px solid var(--glass-border);
+      border-radius: 18px 18px 0 0;
+      overflow: hidden;
+    }
+
+    #screen-home.screen.active {
+      display: grid !important;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 12px;
+      align-items: start;
+      padding-left: 18px !important;
+      padding-right: 18px !important;
+    }
+
+    #screen-home .header {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+
+    #screen-home .ring-container {
+      grid-column: 1 / 5;
+      min-height: 260px;
+      align-self: stretch;
+      background: var(--vf-bg-panel);
+      border: 1px solid var(--vf-line);
+      border-radius: 16px;
+      margin: 0 !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #screen-home .macro-grid {
+      grid-column: 5 / 13;
+      margin: 0 !important;
+    }
+
+    #screen-home #net-bar,
+    #screen-home .energy-card {
+      grid-column: 5 / 13;
+    }
+
+    #custom-nutrient-bar,
+    #custom-nutrient-add {
+      grid-column: 5 / 13;
+    }
+
+    #habit-home-card {
+      grid-column: 1 / 7;
+    }
+
+    #water-card {
+      grid-column: 7 / 13;
+    }
+
+    #mascot-card {
+      grid-column: 1 / 7;
+    }
+
+    #micro-card {
+      grid-column: 7 / 13;
+    }
+
+    #screen-home > .section-header,
+    #meals-container,
+    #workout-container {
+      grid-column: 1 / -1;
+    }
+
+    #meals-container,
+    #workout-container {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 12px;
+    }
+
+    #meals-container > .empty-state,
+    #workout-container > .empty-state,
+    #meals-container > div,
+    #workout-container > div {
+      min-width: 0;
+    }
+
+    .modal {
+      max-width: 560px;
+      border-radius: 24px !important;
+      border-bottom: 1px solid var(--glass-border) !important;
+      margin-bottom: 24px;
+    }
+
+    .modal-overlay {
+      align-items: center !important;
+    }
+  }
+</style>
+<script>
+(function(){
+  function getHabitsSafe(){
+    try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); }
+    catch(e) { return []; }
+  }
+  function getLogsSafe(){
+    try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); }
+    catch(e) { return {}; }
+  }
+  function todayKey(){
+    return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10);
+  }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function pauseLimit(h){ return Math.max(0, Math.min(3, parseInt(h.pauseLimit == null ? 3 : h.pauseLimit, 10) || 0)); }
+  function countPausesThisWeek(id){
+    var logs = getLogsSafe();
+    var now = new Date();
+    var start = new Date(now);
+    start.setHours(0,0,0,0);
+    start.setDate(start.getDate() - start.getDay());
+    var count = 0;
+    for(var i=0;i<7;i++){
+      var d = new Date(start);
+      d.setDate(start.getDate()+i);
+      var key = d.toISOString().slice(0,10);
+      var s = (logs[key] || {})[id];
+      if(s === 'skipped' || s === 'paused') count++;
+    }
+    return count;
+  }
+  function pausesLeft(h){ return Math.max(0, pauseLimit(h) - countPausesThisWeek(h.id)); }
+  function streak(h){
+    if(typeof getHabitStreak === 'function') return getHabitStreak(h.id,h.type);
+    return 0;
+  }
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var key = todayKey();
+    var log = getLogsSafe()[key] || {};
+    var habits = getHabitsSafe().filter(function(h){ return createdBy(h,key) && scheduledOn(h,new Date()); });
+    if(!habits.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+
+    var good = habits.filter(function(h){ return h.type === 'good'; });
+    var bad = habits.filter(function(h){ return h.type === 'bad'; });
+    var done = habits.filter(function(h){ return ['done','maintained'].indexOf(log[h.id]) >= 0; }).length;
+
+    function chip(h){
+      var s = log[h.id];
+      var ok = ['done','maintained'].indexOf(s) >= 0;
+      var paused = s === 'skipped' || s === 'paused';
+      var failed = ['missed','relapsed'].indexOf(s) >= 0;
+      var color = ok ? '#00e5a0' : paused ? '#ffa726' : failed ? '#ff5252' : '#777';
+      var extra = h.type === 'good' ? ' Â· Pause '+pausesLeft(h)+'/'+pauseLimit(h) : '';
+      return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:7px 10px;font-size:11px;background:rgba(255,255,255,0.03);font-weight:700;">'
+        + h.name + ' <span style="color:#ffa726;">&#128293; '+streak(h)+'</span>' + extra +
+      '</div>';
+    }
+
+    var html =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+habits.length+' done</span>' +
+      '</div>';
+
+    if(good.length){
+      html += '<div style="font-size:10px;color:#00e5a0;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Good Habits</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px;">'+good.map(chip).join('')+'</div>';
+    }
+    if(bad.length){
+      html += '<div style="font-size:10px;color:#ff5252;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Bad Habits</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+bad.map(chip).join('')+'</div>';
+    }
+    card.innerHTML = html;
+  };
+
+  function pinGoalRight(){
+    var home = document.getElementById('screen-home');
+    var goal = home ? home.querySelector('.goal-pill') : null;
+    if(goal) goal.style.marginLeft = 'auto';
+  }
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    pinGoalRight();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    pinGoalRight();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  });
+})();
+</script>
+<!-- VITALFLOW_HABIT_LAYOUT_V9 -->
+<style>
+  /* Restore old universal vertical flow. PC should use full width, not dashboard columns. */
+  @media (min-width: 900px) {
+    #app {
+      max-width: none !important;
+      width: 100% !important;
+      margin: 0 !important;
+    }
+    .bottom-nav {
+      max-width: none !important;
+      width: 100% !important;
+      left: 0 !important;
+      right: 0 !important;
+      transform: none !important;
+      border-radius: 0 !important;
+    }
+    #screen-home.screen.active {
+      display: block !important;
+      padding-left: 16px !important;
+      padding-right: 16px !important;
+    }
+    #screen-home .ring-container {
+      min-height: auto !important;
+      background: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      margin: 0 !important;
+    }
+    #meals-container,
+    #workout-container {
+      display: block !important;
+    }
+    .modal {
+      max-width: none !important;
+      border-radius: 24px 24px 0 0 !important;
+      margin-bottom: 0 !important;
+    }
+    .modal-overlay {
+      align-items: flex-end !important;
+    }
+  }
+
+  #screen-home .goal-pill {
+    margin-left: auto !important;
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var PAUSE_COST = 45;
+  var uiState = {days: [], type: 'good', severity: 'normal', editId: null};
+
+  function keyToday(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function getHabits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function saveHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function getLogs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function saveLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function pauseLimit(h){ return Math.max(0, Math.min(3, parseInt(h.pauseLimit == null ? 3 : h.pauseLimit, 10) || 0)); }
+  function penalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -penalty(h);
+    if(status === 'skipped' || status === 'paused') return -PAUSE_COST;
+    return 0;
+  }
+  function addPts(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+  function weekStart(date){
+    var d = new Date(date);
+    d.setHours(0,0,0,0);
+    d.setDate(d.getDate() - d.getDay());
+    return d;
+  }
+  function countPausesThisWeek(id){
+    var logs = getLogs();
+    var start = weekStart(new Date());
+    var count = 0;
+    for(var i=0;i<7;i++){
+      var d = new Date(start);
+      d.setDate(start.getDate()+i);
+      var k = d.toISOString().slice(0,10);
+      var s = (logs[k] || {})[id];
+      if(s === 'skipped' || s === 'paused') count++;
+    }
+    return count;
+  }
+  function pausesLeft(h){ return Math.max(0, pauseLimit(h) - countPausesThisWeek(h.id)); }
+  function upsertHabit(habit){
+    var list = getHabits();
+    var idx = list.findIndex(function(h){ return h.id === habit.id; });
+    if(idx >= 0) list[idx] = habit;
+    else list.push(habit);
+    saveHabits(list);
+  }
+  function toast(msg){
+    var old = document.querySelector('.vf-toast');
+    if(old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'vf-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function(){
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .35s ease';
+      setTimeout(function(){ if(el.parentNode) el.remove(); }, 380);
+    }, 3200);
+  }
+
+  function ensureDayPicker(){
+    var desc = document.getElementById('hab-desc');
+    if(!desc) return;
+    if(!document.getElementById('hab-day-picker')){
+      var html = '<div style="font-size:10px;color:#555;margin-bottom:5px;">Select days for this habit:</div>';
+      html += '<div id="hab-day-picker" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">';
+      DAYS.forEach(function(d,i){ html += '<span class="tab-pill" data-hday="'+i+'">'+d+'</span>'; });
+      html += '</div>';
+      html += '<div style="font-size:10px;color:#666;margin:-2px 0 10px;">Days per week updates automatically. Leave all unselected for every day.</div>';
+      desc.insertAdjacentHTML('afterend', html);
+    }
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      btn.onclick = function(){
+        var d = parseInt(btn.dataset.hday, 10);
+        uiState.days = uiState.days.indexOf(d) >= 0 ? uiState.days.filter(function(x){ return x !== d; }) : uiState.days.concat(d);
+        uiState.days.sort(function(a,b){ return a-b; });
+        paintDays();
+      };
+    });
+    paintDays();
+  }
+
+  function ensurePauseControl(){
+    var goodOpts = document.getElementById('good-habit-opts');
+    if(!goodOpts || document.getElementById('hab-pause-limit')) return;
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div style="font-size:10px;color:#555;margin-bottom:5px;">Pause allowance per week:</div>' +
+      '<div id="vf-pause-presets" style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">' +
+        '<span class="tab-pill" data-pause="0">0 pause</span>' +
+        '<span class="tab-pill" data-pause="1">1 pause</span>' +
+        '<span class="tab-pill" data-pause="2">2 pauses</span>' +
+        '<span class="tab-pill" data-pause="3">3 max</span>' +
+      '</div>' +
+      '<input class="inp" id="hab-pause-limit" type="number" min="0" max="3" placeholder="Pause limit per week, max 3" value="3">' +
+      '<div class="vf-pause-note">Pause keeps your streak alive, but costs 45 rank points. It is only available for good habits.</div>';
+    goodOpts.appendChild(wrap);
+    document.querySelectorAll('#vf-pause-presets .tab-pill').forEach(function(btn){
+      btn.onclick = function(){ document.getElementById('hab-pause-limit').value = btn.dataset.pause; };
+    });
+  }
+
+  function paintDays(){
+    var inp = document.getElementById('hab-days');
+    if(inp) inp.value = uiState.days.length ? uiState.days.length : 7;
+    document.querySelectorAll('#hab-day-picker .tab-pill').forEach(function(btn){
+      var d = parseInt(btn.dataset.hday, 10);
+      btn.classList.toggle('active', uiState.days.indexOf(d) >= 0);
+    });
+  }
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    uiState.type = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+    ensurePauseControl();
+  };
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    uiState.severity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    uiState.editId = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensureDayPicker();
+    ensurePauseControl();
+    var h = id ? getHabits().find(function(x){ return x.id === id; }) : null;
+    uiState.days = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    uiState.type = h ? h.type : 'good';
+    uiState.severity = h ? (h.severity || 'normal') : 'normal';
+    var pauseInp = document.getElementById('hab-pause-limit');
+    if(pauseInp) pauseInp.value = h ? pauseLimit(h) : 3;
+    paintDays();
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = getHabits();
+    var old = uiState.editId ? list.find(function(h){ return h.id === uiState.editId; }) : null;
+    var pauseInp = document.getElementById('hab-pause-limit');
+    var habit = {
+      id: uiState.editId || 'h_' + Date.now(),
+      name: name,
+      type: uiState.type,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: uiState.days.length ? uiState.days.length : 7,
+      daysOfWeek: uiState.days.slice(),
+      pts: parseInt(document.getElementById('hab-pts').value, 10) || 5,
+      severity: uiState.severity || 'normal',
+      pauseLimit: uiState.type === 'good' ? Math.max(0, Math.min(3, parseInt((pauseInp && pauseInp.value) || '3', 10))) : 0,
+      streakPenalty: old && old.streakPenalty ? old.streakPenalty : 0,
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(uiState.editId){
+      var idx = list.findIndex(function(h){ return h.id === uiState.editId; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    saveHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var logs = getLogs();
+    var h = getHabits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var count = 0;
+    var misses = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var k = d.toISOString().slice(0,10);
+      if(!createdBy(h,k)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var s = (logs[k] || {})[id];
+      if(type === 'good'){
+        if(s === 'done') count++;
+        else if(s === 'skipped' || s === 'paused') {
+          /* pause: keep searching backward, do not increment or decrement */
+        } else if(s === 'missed') {
+          misses++;
+        } else {
+          break;
+        }
+      } else {
+        if(s === 'maintained') count++;
+        else break;
+      }
+      d.setDate(d.getDate()-1);
+    }
+    return Math.max(0, count - misses - (h.streakPenalty || 0));
+  };
+
+  function applyModerateRelapse(h, oldStreak){
+    var cut = oldStreak < 7 ? 4 : oldStreak > 21 ? 8 : 6;
+    h.streakPenalty = (h.streakPenalty || 0) + cut;
+    upsertHabit(h);
+  }
+  function dropRankIfSerious(h){
+    if(!h || h.severity !== 'serious' || typeof RANKS === 'undefined') return;
+    var pts = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    var rank = typeof getRank === 'function' ? getRank(pts) : RANKS[0];
+    var idx = RANKS.indexOf(rank);
+    var nextIdx = Math.max(0, idx - 2);
+    if(nextIdx < idx){
+      var nr = RANKS[nextIdx];
+      localStorage.setItem('nf_pts', nr.min);
+      if(typeof updateRankBadge === 'function') updateRankBadge();
+      if(typeof showRankNotification === 'function') showRankNotification('Habit streak broken', h.name + ' reset to 0. Rank dropped to ' + nr.name + '.', nr.color);
+      else alert(h.name + ' streak reset to 0. Rank dropped to ' + nr.name + '.');
+    }
+  }
+
+  window.logHabitToday = function(id,status){
+    var logs = getLogs();
+    var k = keyToday();
+    if(!logs[k]) logs[k] = {};
+    var h = getHabits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    if((status === 'skipped' || status === 'paused') && h.type !== 'good') return;
+    if((status === 'skipped' || status === 'paused') && logs[k][id] !== status && pausesLeft(h) <= 0){
+      toast('No pauses left this week for ' + h.name + '.');
+      return;
+    }
+    var prev = logs[k][id];
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPts(-oldImpact);
+      delete logs[k][id];
+      saveLogs(logs);
+      renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPts(-oldImpact);
+    logs[k][id] = status;
+    saveLogs(logs);
+    addPts(impact(h,status));
+    if(status === 'skipped' || status === 'paused') toast('Pause used for ' + h.name + '. Streak is safe, but 45 points were reduced.');
+    if(status === 'relapsed' && h.type === 'bad'){
+      if(h.severity === 'moderate') applyModerateRelapse(h, oldStreak);
+      if(h.severity === 'serious') dropRankIfSerious(h);
+    }
+    if(status === 'missed' && h.type === 'good' && h.severity === 'serious') dropRankIfSerious(h);
+    renderHabits();
+  };
+
+  function habitCard(h,todayLog){
+    var status = todayLog[h.id];
+    var severity = h.severity || 'normal';
+    var streak = window.getHabitStreak(h.id,h.type);
+    var left = pausesLeft(h);
+    var actions = '';
+    if(h.type === 'good'){
+      actions =
+        '<button class="hab-btn hab-done'+(status==='done'?' active':'')+'" data-id="'+h.id+'" data-status="done">&#10003; Done</button>' +
+        '<button class="hab-btn hab-skip'+(status==='skipped'?' active':'')+'" data-id="'+h.id+'" data-status="skipped" '+(left<=0 && status!=='skipped'?'style="opacity:.45;"':'')+'>&#9208; Pause ('+left+')</button>' +
+        '<button class="hab-btn hab-miss'+(status==='missed'?' active':'')+'" data-id="'+h.id+'" data-status="missed">&#10007; Missed</button>';
+    } else {
+      actions =
+        '<button class="hab-btn hab-done'+(status==='maintained'?' active':'')+'" data-id="'+h.id+'" data-status="maintained" style="flex:2;">&#10003; Maintained</button>' +
+        '<button class="hab-btn hab-miss'+(status==='relapsed'?' active':'')+'" data-id="'+h.id+'" data-status="relapsed">&#10007; Relapsed</button>';
+    }
+    return '<div class="habit-card habit-type-'+h.type+'">' +
+      '<div class="habit-header">' +
+        '<div style="flex:1;">' +
+          '<div class="habit-name">'+h.name+' <span class="severity-'+severity+'">'+severity.charAt(0).toUpperCase()+severity.slice(1)+'</span></div>' +
+          (h.desc ? '<div class="habit-desc">'+h.desc+'</div>' : '') +
+          '<div style="font-size:10px;color:#666;margin-top:3px;">+'+(h.pts||5)+' pts, -'+penalty(h)+' penalty'+(h.type==='good'?' | Pause: -45 pts':'')+'</div>' +
+          '<div style="font-size:10px;color:#777;margin-top:3px;">Schedule: '+dayLabel(h)+' | '+(h.days||7)+' days/week'+(h.type==='good'?' | Pauses left: '+left+'/'+pauseLimit(h):'')+'</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0;margin-left:8px;">' +
+          '<div class="vf-streak-chip">&#128293; '+streak+' day'+(streak===1?'':'s')+'</div>' +
+          '<div style="display:flex;gap:5px;justify-content:flex-end;margin-top:8px;">' +
+            '<button class="vf-icon-btn" data-edit="'+h.id+'" title="Edit">&#9999;</button>' +
+            '<button class="vf-icon-btn delete" data-del="'+h.id+'" title="Delete">&#128465;</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="habit-actions">'+actions+'</div>' +
+    '</div>';
+  }
+
+  window.renderHabits = function(){
+    var logs = getLogs();
+    var todayLog = logs[keyToday()] || {};
+    var all = getHabits();
+    var good = all.filter(function(h){ return h.type === 'good'; });
+    var bad = all.filter(function(h){ return h.type === 'bad'; });
+    var goodEl = document.getElementById('good-habits-list');
+    var badEl = document.getElementById('bad-habits-list');
+    if(!goodEl || !badEl) return;
+    goodEl.innerHTML = good.length ? good.map(function(h){ return habitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No good habits yet</div>';
+    badEl.innerHTML = bad.length ? bad.map(function(h){ return habitCard(h,todayLog); }).join('') : '<div class="empty-state" style="padding:10px 0;font-size:12px;">No bad habits to break yet</div>';
+    [goodEl,badEl].forEach(function(el){
+      el.onclick = function(e){
+        var btn = e.target.closest('button');
+        if(!btn) return;
+        if(btn.dataset.status) window.logHabitToday(btn.dataset.id,btn.dataset.status);
+        else if(btn.dataset.edit) window.openAddHabitModal(btn.dataset.edit);
+        else if(btn.dataset.del && typeof deleteHabit === 'function') deleteHabit(btn.dataset.del);
+      };
+    });
+    renderHabitHomeCard();
+  };
+
+  window.renderHabitHomeCard = function(){
+    var card = document.getElementById('habit-home-card');
+    if(!card) return;
+    var k = keyToday();
+    var todayLog = getLogs()[k] || {};
+    var visible = getHabits().filter(function(h){ return createdBy(h,k) && scheduledOn(h,new Date()); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    var done = visible.filter(function(h){ return ['done','maintained'].indexOf(todayLog[h.id]) >= 0; }).length;
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    function chip(h){
+      var s = todayLog[h.id];
+      var ok = ['done','maintained'].indexOf(s) >= 0;
+      var paused = s === 'skipped' || s === 'paused';
+      var failed = ['missed','relapsed'].indexOf(s) >= 0;
+      var color = ok ? '#00e5a0' : paused ? '#ffa726' : failed ? '#ff5252' : '#777';
+      return '<div style="border:1px solid '+color+'55;color:'+color+';border-radius:10px;padding:7px 10px;font-size:11px;background:rgba(255,255,255,0.03);font-weight:700;">'
+        + h.name + ' <span style="color:#ffa726;">&#128293; '+window.getHabitStreak(h.id,h.type)+'</span></div>';
+    }
+    var html =
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+        '<span class="card-title" style="margin:0;">Habits Today</span>' +
+        '<span style="font-size:11px;color:#555;">'+done+'/'+visible.length+' done</span>' +
+      '</div>';
+    if(good.length){
+      html += '<div style="font-size:10px;color:#00e5a0;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Good Habits</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:11px;">'+good.map(chip).join('')+'</div>';
+    }
+    if(bad.length){
+      html += '<div style="font-size:10px;color:#ff5252;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Bad Habits</div>';
+      html += '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+bad.map(chip).join('')+'</div>';
+    }
+    card.innerHTML = html;
+  };
+
+  function pinGoalRight(){
+    var home = document.getElementById('screen-home');
+    var goal = home ? home.querySelector('.goal-pill') : null;
+    if(goal) goal.style.marginLeft = 'auto';
+  }
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    pinGoalRight();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureDayPicker();
+    ensurePauseControl();
+    pinGoalRight();
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  });
+})();
+</script>
+<!-- VITALFLOW_BUGFIX_V10 -->
+<style>
+  #micro-card > div:first-child {
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+  #micro-card > div:first-child .card-title {
+    margin-right: auto !important;
+  }
+  #micro-card > div:first-child button {
+    margin-left: auto !important;
+  }
+
+  #net-bar.energy-balance-v10 {
+    display: block;
+    background: linear-gradient(135deg, rgba(0,229,160,0.075), rgba(0,180,216,0.045), rgba(255,159,28,0.045)) !important;
+    border: 1px solid rgba(0,229,160,0.18) !important;
+    border-radius: 16px !important;
+    padding: 13px 14px !important;
+    margin: 10px 0 12px !important;
+    box-shadow: 0 14px 38px rgba(0,0,0,0.2);
+  }
+  .eb10-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 11px;
+  }
+  .eb10-title {
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 800;
+  }
+  .eb10-sub {
+    font-size: 10px;
+    color: var(--text3);
+    margin-top: 2px;
+  }
+  .eb10-balance {
+    font-size: 20px;
+    color: var(--neon);
+    font-weight: 900;
+    white-space: nowrap;
+  }
+  .eb10-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.075);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 11px;
+  }
+  .eb10-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--neon), var(--neon2));
+    border-radius: 999px;
+    transition: width .35s ease;
+  }
+  .eb10-grid {
+    display: grid;
+    grid-template-columns: repeat(3,minmax(0,1fr));
+    gap: 8px;
+  }
+  .eb10-stat {
+    background: rgba(0,0,0,0.16);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 8px 6px;
+    text-align: center;
+  }
+  .eb10-val {
+    font-size: 14px;
+    font-weight: 900;
+  }
+  .eb10-lbl {
+    margin-top: 2px;
+    font-size: 9px;
+    color: var(--text3);
+  }
+</style>
+<script>
+(function(){
+  var RANKS_V10 = [
+    {name:'Bronze',   icon:'\uD83E\uDD49', color:'#cd7f32', min:0,    max:199},
+    {name:'Silver',   icon:'\uD83E\uDD48', color:'#c0c0c0', min:200,  max:599},
+    {name:'Gold',     icon:'\uD83E\uDD47', color:'#ffd700', min:600,  max:1199},
+    {name:'Ruby',     icon:'\uD83D\uDC8E', color:'#e91e63', min:1200, max:2199},
+    {name:'Diamond',  icon:'\uD83D\uDCA0', color:'#29b6f6', min:2200, max:3999},
+    {name:'Emerald',  icon:'\uD83D\uDC9A', color:'#00e5a0', min:4000, max:Infinity}
+  ];
+
+  function getState(){
+    try { return JSON.parse(localStorage.getItem('nf_s') || '{}'); }
+    catch(e) { return {}; }
+  }
+  function todayKey(){
+    return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10);
+  }
+  function goal(){
+    return typeof calGoal !== 'undefined' ? calGoal : parseInt(localStorage.getItem('nf_goal') || '2500',10);
+  }
+
+  function ensureNetIds(){
+    var net = document.getElementById('net-bar');
+    if(!net) return;
+    if(document.getElementById('net-eaten') && document.getElementById('net-burned') && document.getElementById('net-total')) return;
+    net.className = 'net-bar';
+    net.innerHTML =
+      '<div class="net-item"><div class="net-val" id="net-eaten" style="color:#00e5a0;">0</div><div class="net-lbl">Food</div></div>' +
+      '<div class="net-item"><div class="net-val" id="net-burned" style="color:#ff5252;">0</div><div class="net-lbl">Workout</div></div>' +
+      '<div class="net-item"><div class="net-val" id="net-total" style="color:#ffa726;">0</div><div class="net-lbl">Balance</div></div>';
+  }
+
+  function getTodayTotals(){
+    var s = getState();
+    var d = s[todayKey()] || {meals:[],workouts:[]};
+    var meals = d.meals || [];
+    var workouts = d.workouts || [];
+    var eaten = meals.reduce(function(a,m){ return a + (m.cal || 0); },0);
+    var burned = workouts.reduce(function(a,w){ return a + (w.cal || 0); },0);
+    return {eaten:eaten,burned:burned,balance:eaten-burned,workouts:workouts};
+  }
+
+  function enhanceEnergy(){
+    var net = document.getElementById('net-bar');
+    if(!net) return;
+    var t = getTodayTotals();
+    if(t.burned <= 0){
+      net.style.display = 'none';
+      ensureNetIds();
+      return;
+    }
+    var g = goal();
+    var pct = Math.max(0, Math.min(100, Math.round(t.balance / g * 100)));
+    var left = Math.max(0, g - t.balance);
+    net.className = 'energy-balance-v10';
+    net.style.display = 'block';
+    net.innerHTML =
+      '<div style="display:none;"><span id="net-eaten">'+t.eaten+'</span><span id="net-burned">'+t.burned+'</span><span id="net-total">'+t.balance+'</span></div>' +
+      '<div class="eb10-head">' +
+        '<div><div class="eb10-title">Energy Balance</div><div class="eb10-sub">Food minus workout burn</div></div>' +
+        '<div class="eb10-balance">'+t.balance+' kcal</div>' +
+      '</div>' +
+      '<div class="eb10-bar"><div class="eb10-fill" style="width:'+pct+'%;"></div></div>' +
+      '<div class="eb10-grid">' +
+        '<div class="eb10-stat"><div class="eb10-val" style="color:var(--neon);">'+t.eaten+'</div><div class="eb10-lbl">Food</div></div>' +
+        '<div class="eb10-stat"><div class="eb10-val" style="color:var(--red);">'+t.burned+'</div><div class="eb10-lbl">Burned</div></div>' +
+        '<div class="eb10-stat"><div class="eb10-val" style="color:var(--orange);">'+left+'</div><div class="eb10-lbl">Left</div></div>' +
+      '</div>';
+  }
+
+  function renderWorkoutSafe(){
+    var box = document.getElementById('workout-container');
+    if(!box) return;
+    var t = getTodayTotals();
+    var workouts = t.workouts || [];
+    if(!workouts.length){
+      box.innerHTML = '<div class="empty-state">Koi workout nahi â€” gym gaye? &#128170;</div>';
+      return;
+    }
+    box.innerHTML = workouts.map(function(w,i){
+      return '<div class="workout-item"><div style="flex:1;"><div class="workout-name">'+
+        (w.name || 'Workout')+'<span class="muscle-tag">'+(w.muscle || 'Full Body')+'</span></div><div class="workout-meta">'+
+        (w.type || 'Other')+(w.duration?' Â· '+w.duration+' mins':'')+(w.notes?' Â· '+w.notes:'')+
+        '</div></div><div style="display:flex;align-items:center;gap:5px;">'+
+        (w.cal?'<span class="workout-cal-txt">-'+w.cal+'</span>':'')+
+        '<button class="meal-del" onclick="deleteWorkout('+i+')">Ã—</button></div></div>';
+    }).join('');
+  }
+
+  function dedupeTodayWorkouts(){
+    var s = getState();
+    var k = todayKey();
+    if(!s[k] || !Array.isArray(s[k].workouts)) return;
+    var seen = {};
+    var cleaned = [];
+    s[k].workouts.forEach(function(w){
+      var id = [w.name,w.type,w.muscle,w.duration,w.cal,w.notes].join('|');
+      if(!seen[id]){
+        seen[id] = true;
+        cleaned.push(w);
+      }
+    });
+    if(cleaned.length !== s[k].workouts.length){
+      s[k].workouts = cleaned;
+      localStorage.setItem('nf_s', JSON.stringify(s));
+    }
+  }
+
+  function patchRanks(){
+    try {
+      if(typeof RANKS !== 'undefined' && Array.isArray(RANKS)){
+        RANKS.splice(0, RANKS.length);
+        RANKS_V10.forEach(function(r){ RANKS.push(r); });
+      }
+    } catch(e) {}
+  }
+
+  window.getRank = function(pts){
+    patchRanks();
+    var list = (typeof RANKS !== 'undefined' && Array.isArray(RANKS)) ? RANKS : RANKS_V10;
+    return list.find(function(r){ return pts >= r.min && pts <= r.max; }) || list[0];
+  };
+
+  function alignMicroGoalButton(){
+    var card = document.getElementById('micro-card');
+    if(!card) return;
+    var header = card.querySelector('div[style*="justify-content:space-between"]');
+    if(!header) return;
+    header.style.justifyContent = 'space-between';
+    header.style.gap = '8px';
+    var title = header.querySelector('.card-title');
+    var buttons = header.querySelectorAll('button');
+    if(title) title.style.marginRight = 'auto';
+    buttons.forEach(function(btn){ btn.style.marginLeft = 'auto'; });
+  }
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    ensureNetIds();
+    dedupeTodayWorkouts();
+    try {
+      if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    } catch(err) {
+      console.error('VitalFlow updateUI recovered:', err);
+    }
+    patchRanks();
+    ensureNetIds();
+    enhanceEnergy();
+    renderWorkoutSafe();
+    alignMicroGoalButton();
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  };
+
+  var oldSaveWorkout = window.saveWorkout;
+  window.saveWorkout = function(){
+    ensureNetIds();
+    try {
+      if(typeof oldSaveWorkout === 'function') oldSaveWorkout();
+    } catch(err) {
+      console.error('VitalFlow workout save recovered:', err);
+      renderWorkoutSafe();
+      enhanceEnergy();
+      var modal = document.getElementById('workout-modal');
+      if(modal) modal.classList.remove('open');
+    }
+    dedupeTodayWorkouts();
+    renderWorkoutSafe();
+    enhanceEnergy();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    patchRanks();
+    ensureNetIds();
+    dedupeTodayWorkouts();
+    enhanceEnergy();
+    renderWorkoutSafe();
+    alignMicroGoalButton();
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  });
+})();
+</script>
+<!-- VITALFLOW_FINAL_FIXES_V11 -->
+<style>
+  #micro-card .vf-micro-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #micro-card .vf-micro-actions button {
+    margin-left: 0 !important;
+  }
+  #micro-card .vf-micro-actions .vf-goals-btn {
+    order: 2;
+  }
+  #micro-card .vf-micro-actions .vf-show-btn {
+    order: 1;
+  }
+  .vf-bad-days-box {
+    margin-top: 8px;
+  }
+</style>
+<script>
+(function(){
+  var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var PAUSE_COST = 45;
+  var editState = {id:null,type:'good',severity:'normal',days:[]};
+
+  function todayKey(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function habits(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function saveHabits(v){ localStorage.setItem('vf_habits', JSON.stringify(v)); }
+  function logs(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function saveLogs(v){ localStorage.setItem('vf_habit_logs', JSON.stringify(v)); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function dayLabel(h){ return h.daysOfWeek && h.daysOfWeek.length ? h.daysOfWeek.map(function(d){ return DAYS[d]; }).join(', ') : 'Every day'; }
+  function pauseLimit(h){ return Math.max(0, Math.min(3, parseInt(h.pauseLimit == null ? 3 : h.pauseLimit, 10) || 0)); }
+  function habitPenalty(h){ return h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3; }
+  function addPointsSafe(n){
+    var cur = typeof getPoints === 'function' ? getPoints() : parseInt(localStorage.getItem('nf_pts') || '0', 10);
+    localStorage.setItem('nf_pts', Math.max(0, cur + n));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+  function impact(h,status){
+    if(status === 'done' || status === 'maintained') return h.pts || 5;
+    if(status === 'missed' || status === 'relapsed') return -habitPenalty(h);
+    if(status === 'skipped' || status === 'paused') return -PAUSE_COST;
+    return 0;
+  }
+  function weekStart(d){
+    var x = new Date(d);
+    x.setHours(0,0,0,0);
+    x.setDate(x.getDate() - x.getDay());
+    return x;
+  }
+  function countPausesThisWeek(id){
+    var l = logs();
+    var start = weekStart(new Date());
+    var count = 0;
+    for(var i=0;i<7;i++){
+      var d = new Date(start);
+      d.setDate(start.getDate()+i);
+      var k = d.toISOString().slice(0,10);
+      var s = (l[k] || {})[id];
+      if(s === 'skipped' || s === 'paused') count++;
+    }
+    return count;
+  }
+  function pausesLeft(h){ return Math.max(0, pauseLimit(h) - countPausesThisWeek(h.id)); }
+  function toast(msg){
+    var old = document.querySelector('.vf-toast');
+    if(old) old.remove();
+    var el = document.createElement('div');
+    el.className = 'vf-toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function(){
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .35s ease';
+      setTimeout(function(){ if(el.parentNode) el.remove(); }, 380);
+    }, 3200);
+  }
+  function upsertHabit(habit){
+    var list = habits();
+    var idx = list.findIndex(function(h){ return h.id === habit.id; });
+    if(idx >= 0) list[idx] = habit;
+    else list.push(habit);
+    saveHabits(list);
+  }
+
+  function fixMicroHeader(){
+    var card = document.getElementById('micro-card');
+    if(!card) return;
+    var header = card.querySelector('div[style*="justify-content:space-between"]');
+    if(!header) return;
+    var title = header.querySelector('.card-title');
+    var buttons = Array.prototype.slice.call(header.querySelectorAll('button'));
+    if(!buttons.length) return;
+    var goals = buttons.find(function(btn){ return (btn.textContent || '').toLowerCase().indexOf('goal') >= 0; }) || buttons[0];
+    var show = buttons.find(function(btn){ return btn !== goals; });
+    var wrap = header.querySelector('.vf-micro-actions');
+    if(!wrap){
+      wrap = document.createElement('div');
+      wrap.className = 'vf-micro-actions';
+      header.appendChild(wrap);
+    }
+    if(title) title.style.marginRight = 'auto';
+    if(show){
+      show.classList.add('vf-show-btn');
+      wrap.appendChild(show);
+    }
+    goals.classList.add('vf-goals-btn');
+    wrap.appendChild(goals);
+    header.style.justifyContent = 'space-between';
+  }
+
+  function safeWorkoutRender(){
+    var box = document.getElementById('workout-container');
+    if(!box) return;
+    var state;
+    try { state = JSON.parse(localStorage.getItem('nf_s') || '{}'); } catch(e) { state = {}; }
+    var day = state[todayKey()] || {};
+    var workouts = day.workouts || [];
+    if(!workouts.length){
+      box.innerHTML = '<div class="empty-state">Koi workout nahi - gym gaye?</div>';
+      return;
+    }
+    box.innerHTML = workouts.map(function(w,i){
+      return '<div class="workout-item"><div style="flex:1;"><div class="workout-name">'+
+        (w.name || 'Workout')+'<span class="muscle-tag">'+(w.muscle || 'Full Body')+'</span></div><div class="workout-meta">'+
+        (w.type || 'Other')+(w.duration?' - '+w.duration+' mins':'')+(w.notes?' - '+w.notes:'')+
+        '</div></div><div style="display:flex;align-items:center;gap:5px;">'+
+        (w.cal?'<span class="workout-cal-txt">-'+w.cal+'</span>':'')+
+        '<button class="meal-del" onclick="deleteWorkout('+i+')">x</button></div></div>';
+    }).join('');
+  }
+
+  function ensureBadDaysInput(){
+    var badOpts = document.getElementById('bad-habit-opts');
+    if(!badOpts || document.getElementById('bad-hab-days')) return;
+    var box = document.createElement('div');
+    box.className = 'vf-bad-days-box';
+    box.innerHTML =
+      '<div style="font-size:10px;color:#555;margin-bottom:5px;">How many days per week?</div>' +
+      '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
+        '<span class="tab-pill" data-baddays="4">4 days</span>' +
+        '<span class="tab-pill" data-baddays="5">5 days</span>' +
+        '<span class="tab-pill" data-baddays="7">Every day</span>' +
+      '</div>' +
+      '<input class="inp" id="bad-hab-days" type="number" min="1" max="7" placeholder="Days per week, e.g. 5">';
+    badOpts.insertBefore(box, badOpts.firstChild);
+    box.querySelectorAll('[data-baddays]').forEach(function(btn){
+      btn.onclick = function(){ document.getElementById('bad-hab-days').value = btn.dataset.baddays; };
+    });
+  }
+
+  function selectedDaysFromPicker(){
+    var out = [];
+    var picker = document.getElementById('hab-day-picker');
+    if(!picker) return editState.days.slice();
+    picker.querySelectorAll('.tab-pill.active').forEach(function(btn){
+      out.push(parseInt(btn.dataset.hday,10));
+    });
+    return out.sort(function(a,b){ return a-b; });
+  }
+
+  var oldOpen = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    editState.id = id || null;
+    if(typeof oldOpen === 'function') oldOpen(id);
+    ensureBadDaysInput();
+    fixMicroHeader();
+    var h = id ? habits().find(function(x){ return x.id === id; }) : null;
+    editState.type = h ? h.type : 'good';
+    editState.severity = h ? (h.severity || 'normal') : 'normal';
+    editState.days = h && h.daysOfWeek ? h.daysOfWeek.slice() : [];
+    var badDays = document.getElementById('bad-hab-days');
+    if(badDays) badDays.value = h && h.type === 'bad' ? (h.days || (h.daysOfWeek && h.daysOfWeek.length) || 7) : '';
+  };
+
+  var oldSetType = window.setHabitType;
+  window.setHabitType = function(type){
+    editState.type = type;
+    if(typeof oldSetType === 'function') oldSetType(type);
+    ensureBadDaysInput();
+  };
+  var oldSetSeverity = window.setHabSeverity;
+  window.setHabSeverity = function(sev){
+    editState.severity = sev;
+    if(typeof oldSetSeverity === 'function') oldSetSeverity(sev);
+  };
+
+  window.saveHabit = function(){
+    var name = document.getElementById('hab-name').value.trim();
+    if(!name){ alert('Habit ka naam dalo!'); return; }
+    var list = habits();
+    var old = editState.id ? list.find(function(h){ return h.id === editState.id; }) : null;
+    var type = editState.type || (old && old.type) || 'good';
+    var pickedDays = selectedDaysFromPicker();
+    var daysValue;
+    if(type === 'bad'){
+      daysValue = parseInt((document.getElementById('bad-hab-days') || {}).value || '',10);
+      if(!daysValue) daysValue = pickedDays.length ? pickedDays.length : 7;
+    } else {
+      daysValue = pickedDays.length ? pickedDays.length : 7;
+    }
+    var pauseInp = document.getElementById('hab-pause-limit');
+    var habit = {
+      id: editState.id || 'h_' + Date.now(),
+      name: name,
+      type: type,
+      desc: document.getElementById('hab-desc').value.trim(),
+      days: Math.max(1, Math.min(7, daysValue)),
+      daysOfWeek: pickedDays,
+      pts: parseInt(document.getElementById('hab-pts').value,10) || (old && old.pts) || 5,
+      severity: editState.severity || (old && old.severity) || 'normal',
+      pauseLimit: type === 'good' ? Math.max(0, Math.min(3, parseInt((pauseInp && pauseInp.value) || (old && old.pauseLimit) || '3',10))) : 0,
+      streakPenalty: old && old.streakPenalty ? old.streakPenalty : 0,
+      created: old && old.created ? old.created : new Date().toISOString().slice(0,10)
+    };
+    if(editState.id){
+      var idx = list.findIndex(function(h){ return h.id === editState.id; });
+      if(idx >= 0) list[idx] = habit;
+    } else {
+      list.push(habit);
+    }
+    saveHabits(list);
+    if(typeof closeHabitModal === 'function') closeHabitModal();
+    if(typeof renderHabits === 'function') renderHabits();
+  };
+
+  window.getHabitStreak = function(id,type){
+    var l = logs();
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var count = 0;
+    var misses = 0;
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var k = d.toISOString().slice(0,10);
+      if(!createdBy(h,k)){ d.setDate(d.getDate()-1); continue; }
+      if(!scheduledOn(h,d)){ d.setDate(d.getDate()-1); continue; }
+      var s = (l[k] || {})[id];
+      if(type === 'good'){
+        if(s === 'done') count++;
+        else if(s === 'skipped' || s === 'paused') {
+          /* pause keeps streak exactly where it was */
+        } else if(s === 'missed') misses++;
+        else break;
+      } else {
+        if(s === 'maintained') count++;
+        else break;
+      }
+      d.setDate(d.getDate()-1);
+    }
+    return Math.max(0, count - misses - (h.streakPenalty || 0));
+  };
+
+  function applyModerateRelapse(h, oldStreak){
+    var cut = oldStreak < 7 ? 4 : oldStreak > 21 ? 8 : 6;
+    h.streakPenalty = (h.streakPenalty || 0) + cut;
+    upsertHabit(h);
+  }
+  function upsertHabit(h){
+    var list = habits();
+    var idx = list.findIndex(function(x){ return x.id === h.id; });
+    if(idx >= 0) list[idx] = h;
+    else list.push(h);
+    saveHabits(list);
+  }
+
+  window.logHabitToday = function(id,status){
+    var l = logs();
+    var k = todayKey();
+    if(!l[k]) l[k] = {};
+    var h = habits().find(function(x){ return x.id === id; });
+    if(!h) return;
+    if((status === 'skipped' || status === 'paused') && h.type !== 'good') return;
+    if((status === 'skipped' || status === 'paused') && l[k][id] !== status && pausesLeft(h) <= 0){
+      toast('No pauses left this week for ' + h.name + '.');
+      return;
+    }
+    var prev = l[k][id];
+    var oldImpact = prev ? impact(h,prev) : 0;
+    if(prev === status){
+      addPointsSafe(-oldImpact);
+      delete l[k][id];
+      saveLogs(l);
+      if(typeof renderHabits === 'function') renderHabits();
+      return;
+    }
+    var oldStreak = window.getHabitStreak(id,h.type);
+    addPointsSafe(-oldImpact);
+    l[k][id] = status;
+    saveLogs(l);
+    addPointsSafe(impact(h,status));
+    if(status === 'skipped' || status === 'paused') toast('Pause used for ' + h.name + '. Streak is safe, but 45 points were reduced.');
+    if(status === 'relapsed' && h.type === 'bad' && h.severity === 'moderate') applyModerateRelapse(h, oldStreak);
+    if(typeof renderHabits === 'function') renderHabits();
+  };
+
+  var oldRenderHabits = window.renderHabits;
+  window.renderHabits = function(){
+    if(typeof oldRenderHabits === 'function') oldRenderHabits();
+    safeWorkoutRender();
+    fixMicroHeader();
+  };
+
+  var oldUpdate = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdate === 'function') oldUpdate();
+    safeWorkoutRender();
+    fixMicroHeader();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    ensureBadDaysInput();
+    fixMicroHeader();
+    safeWorkoutRender();
+  });
+})();
+</script>
+<!-- VITALFLOW_MICRO_GOAL_V12 -->
+<style>
+  #micro-card .vf-micro-v12-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  #micro-card .vf-micro-v12-title {
+    margin: 0 !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+  #micro-card .vf-micro-v12-actions {
+    margin-left: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 6px !important;
+    flex: 0 0 auto !important;
+  }
+  #micro-card .vf-micro-v12-actions button {
+    position: static !important;
+    margin: 0 !important;
+    min-width: 74px !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+</style>
+<script>
+(function(){
+  function arrangeMicroButtons(){
+    var card = document.getElementById('micro-card');
+    if(!card) return;
+
+    var header = card.querySelector('.vf-micro-v12-header') ||
+      Array.prototype.find.call(card.children, function(el){
+        return el && el.querySelector && el.querySelector('.card-title');
+      });
+    if(!header) return;
+
+    header.classList.add('vf-micro-v12-header');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'flex-start';
+
+    var title = header.querySelector('.card-title');
+    if(title) title.classList.add('vf-micro-v12-title');
+
+    var buttons = Array.prototype.slice.call(header.querySelectorAll('button'));
+    if(!buttons.length) return;
+
+    var actions = header.querySelector('.vf-micro-v12-actions');
+    if(!actions){
+      actions = document.createElement('div');
+      actions.className = 'vf-micro-v12-actions';
+      header.appendChild(actions);
+    }
+
+    var showBtn = buttons.find(function(btn){
+      var t = (btn.textContent || '').toLowerCase();
+      return t.indexOf('show') >= 0 || t.indexOf('hide') >= 0;
+    });
+    var goalsBtn = buttons.find(function(btn){
+      return (btn.textContent || '').toLowerCase().indexOf('goal') >= 0;
+    });
+
+    buttons.forEach(function(btn){
+      if(btn.parentNode !== actions) actions.appendChild(btn);
+    });
+
+    if(showBtn) actions.appendChild(showBtn);
+    if(goalsBtn) actions.appendChild(goalsBtn);
+
+    if(showBtn && goalsBtn){
+      actions.insertBefore(showBtn, goalsBtn);
+    }
+  }
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    arrangeMicroButtons();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    arrangeMicroButtons();
+    setTimeout(arrangeMicroButtons, 100);
+    setTimeout(arrangeMicroButtons, 500);
+  });
+})();
+</script>
+<!-- VITALFLOW_STREAK_WORKOUT_V13 -->
+<script>
+(function(){
+  function todayKey(){ return typeof TODAY_KEY !== 'undefined' ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function getHabitsSafe(){ try { return JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e) { return []; } }
+  function getLogsSafe(){ try { return JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e) { return {}; } }
+  function getStateSafe(){ try { return JSON.parse(localStorage.getItem('nf_s') || '{}'); } catch(e) { return {}; } }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function escText(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(ch){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
+    });
+  }
+
+  window.getHabitStreak = function(id,type){
+    var logs = getLogsSafe();
+    var h = getHabitsSafe().find(function(x){ return x.id === id; });
+    if(!h) return 0;
+    var habitType = h.type || type || 'good';
+    var today = todayKey();
+    var count = 0;
+    var misses = 0;
+    var d = new Date();
+
+    for(var i=0;i<365;i++){
+      var k = d.toISOString().slice(0,10);
+
+      if(!createdBy(h,k)){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+      if(!scheduledOn(h,d)){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+
+      var status = (logs[k] || {})[id];
+
+      /* If today has not been logged yet, keep yesterday's streak visible. */
+      if(k === today && !status){
+        d.setDate(d.getDate()-1);
+        continue;
+      }
+
+      if(habitType === 'good'){
+        if(status === 'done') count++;
+        else if(status === 'skipped' || status === 'paused') {
+          /* Pause keeps streak unchanged and continues looking backward. */
+        } else if(status === 'missed') {
+          misses++;
+        } else {
+          break;
+        }
+      } else {
+        if(status === 'maintained') count++;
+        else if(status === 'relapsed') {
+          if(h.severity === 'moderate') {
+            /* Moderate relapse penalties are stored as streakPenalty. */
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+
+      d.setDate(d.getDate()-1);
+    }
+
+    return Math.max(0, count - misses - (h.streakPenalty || 0));
+  };
+
+  window.renderWorkouts = function(workouts){
+    var box = document.getElementById('workout-container');
+    if(!box) return;
+    workouts = workouts || (((getStateSafe()[todayKey()] || {}).workouts) || []);
+    if(!workouts.length){
+      box.innerHTML = '<div class="empty-state">Koi workout nahi - gym gaye?</div>';
+      return;
+    }
+    box.innerHTML = workouts.map(function(w,i){
+      var name = escText(w.name || 'Workout');
+      var muscle = escText(w.muscle || 'Full Body');
+      var type = escText(w.type || 'Other');
+      var duration = w.duration ? ' - ' + escText(w.duration) + ' mins' : '';
+      var notes = w.notes ? ' - ' + escText(w.notes) : '';
+      var cal = w.cal ? '<span class="workout-cal-txt">-' + escText(w.cal) + '</span>' : '';
+      return '<div class="workout-item">' +
+        '<div style="flex:1;">' +
+          '<div class="workout-name">' + name + '<span class="muscle-tag">' + muscle + '</span></div>' +
+          '<div class="workout-meta">' + type + duration + notes + '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:5px;">' +
+          cal +
+          '<button class="meal-del" onclick="deleteWorkout(' + i + ')">x</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  };
+
+  function rerenderHabitAreas(){
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  }
+
+  var oldUpdateUI = window.updateUI;
+  window.updateUI = function(){
+    if(typeof oldUpdateUI === 'function') oldUpdateUI();
+    var day = getStateSafe()[todayKey()] || {};
+    window.renderWorkouts(day.workouts || []);
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+  };
+
+  var oldLogHabitToday = window.logHabitToday;
+  window.logHabitToday = function(id,status){
+    if(typeof oldLogHabitToday === 'function') oldLogHabitToday(id,status);
+    rerenderHabitAreas();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var day = getStateSafe()[todayKey()] || {};
+    window.renderWorkouts(day.workouts || []);
+    setTimeout(rerenderHabitAreas, 80);
+  });
+})();
+</script></body>
 </html>
