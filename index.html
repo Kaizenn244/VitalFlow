@@ -7432,5 +7432,358 @@ window.__showInstall=function(){
 })();
 /* VITALFLOW_ANDROID_SHARE_BACKUP_V27_END */
 </script>
+
+<script>
+/* VITALFLOW_IMPORT_FIX_V28_START */
+(function(){
+  if(window.__vfImportFixV28) return;
+  window.__vfImportFixV28 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function saveState(s){
+    if(typeof sS === 'function') sS(s);
+    else localStorage.setItem('nf_s', JSON.stringify(s));
+  }
+  function saveCustomFoods(a){
+    if(typeof setCF === 'function') setCF(a);
+    else localStorage.setItem('nf_cf', JSON.stringify(a));
+  }
+  function saveHabitsSafe(a){
+    if(typeof saveHabits === 'function') saveHabits(a);
+    else localStorage.setItem('vf_habits', JSON.stringify(a));
+  }
+  function saveHabitLogsSafe(a){
+    if(typeof saveHabitLogs === 'function') saveHabitLogs(a);
+    else localStorage.setItem('vf_habit_logs', JSON.stringify(a));
+  }
+
+  function applyBackup(data){
+    if(!data || !data.version || String(data.version).indexOf('VitalFlow') < 0){
+      alert('Invalid VitalFlow backup data.');
+      return false;
+    }
+    if(!confirm('This will replace current data on this device. Continue?')) return false;
+
+    if(data.state) saveState(data.state);
+    if(data.customFoods) saveCustomFoods(data.customFoods);
+    if(data.favorites){
+      window.favs = data.favorites;
+      localStorage.setItem('nf_favs', JSON.stringify(data.favorites));
+    }
+    if(data.habits) saveHabitsSafe(data.habits);
+    if(data.habitLogs) saveHabitLogsSafe(data.habitLogs);
+    if(data.profile) localStorage.setItem('nf_profile', JSON.stringify(data.profile));
+    if(data.goals){
+      if(data.goals.calGoal){
+        try { window.calGoal = data.goals.calGoal; } catch(e) {}
+        localStorage.setItem('nf_goal', data.goals.calGoal);
+      }
+      if(data.goals.macroGoals) localStorage.setItem('nf_mg', JSON.stringify(data.goals.macroGoals));
+      if(data.goals.customNutrient) localStorage.setItem('nf_cn', JSON.stringify(data.goals.customNutrient));
+      if(data.goals.wGoal){
+        try { window.wGoal = data.goals.wGoal; } catch(e) {}
+        localStorage.setItem('nf_wgoal', data.goals.wGoal);
+      }
+      if(data.goals.wMpg){
+        try { window.wMpg = data.goals.wMpg; } catch(e) {}
+        localStorage.setItem('nf_wml', data.goals.wMpg);
+      }
+    }
+    if(typeof data.points !== 'undefined') localStorage.setItem('nf_pts', data.points);
+    if(data.weights) localStorage.setItem('nf_weights', JSON.stringify(data.weights));
+    if(data.microGoals) localStorage.setItem('vf_micro_goals', JSON.stringify(data.microGoals));
+
+    alert('Data imported successfully. Reloading now.');
+    location.reload();
+    return true;
+  }
+
+  function parseBackupText(text){
+    if(!text || !text.trim()){
+      alert('No backup text found.');
+      return null;
+    }
+    try {
+      return JSON.parse(text.trim());
+    } catch(e) {
+      alert('Could not read backup JSON. Make sure you pasted the full text starting with { and ending with }.');
+      return null;
+    }
+  }
+
+  window.importData = function(e){
+    var file = e && e.target && e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var data = parseBackupText(ev.target.result);
+      if(data) applyBackup(data);
+    };
+    reader.onerror = function(){
+      alert('Could not read this file. Try Paste Backup Text instead.');
+    };
+    reader.readAsText(file);
+    if(e.target) e.target.value = '';
+  };
+
+  window.vfPasteImportBackup = function(){
+    var old = byId('vf-paste-import-panel-v28');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-paste-import-panel-v28';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Paste Backup Text</div><div style="font-size:11px;color:#a0a0b8;">Paste the full copied JSON backup here.</div></div>' +
+        '<button id="vf-pi-close-v28" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<textarea id="vf-pi-text-v28" style="width:100%;height:180px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;" placeholder="{ ... paste VitalFlow backup here ... }"></textarea>' +
+      '<button id="vf-pi-import-v28" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:9px;">Import Pasted Backup</button>' +
+      '<div style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">This replaces current data on this device after confirmation.</div>';
+    document.body.appendChild(panel);
+    byId('vf-pi-close-v28').onclick = function(){ panel.remove(); };
+    byId('vf-pi-import-v28').onclick = function(){
+      var data = parseBackupText(byId('vf-pi-text-v28').value);
+      if(data) applyBackup(data);
+    };
+    byId('vf-pi-text-v28').focus();
+  };
+
+  function addPasteButton(){
+    if(byId('vf-paste-import-btn-v28')) return;
+    var more = byId('screen-more');
+    if(!more) return;
+    var cards = Array.prototype.slice.call(more.querySelectorAll('.card'));
+    var dataCard = cards.find(function(c){ return (c.textContent || '').indexOf('Data Backup') >= 0; });
+    if(!dataCard) return;
+    var btn = document.createElement('button');
+    btn.id = 'vf-paste-import-btn-v28';
+    btn.type = 'button';
+    btn.textContent = 'Paste Backup Text';
+    btn.onclick = window.vfPasteImportBackup;
+    btn.style.cssText = 'width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;';
+    var shareBtn = byId('vf-share-backup-inline-v27');
+    if(shareBtn && shareBtn.parentNode) shareBtn.parentNode.insertBefore(btn, shareBtn.nextSibling);
+    else dataCard.appendChild(btn);
+  }
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(addPasteButton, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', addPasteButton);
+  setTimeout(addPasteButton, 250);
+  setTimeout(addPasteButton, 1000);
+})();
+/* VITALFLOW_IMPORT_FIX_V28_END */
+</script>
+
+<script>
+/* VITALFLOW_COPY_PASTE_BACKUP_V29_START */
+(function(){
+  if(window.__vfCopyPasteBackupV29) return;
+  window.__vfCopyPasteBackupV29 = true;
+
+  function byId(id){ return document.getElementById(id); }
+
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+
+  function backupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null)
+    };
+  }
+
+  function saveState(s){
+    if(typeof sS === 'function') sS(s);
+    else localStorage.setItem('nf_s', JSON.stringify(s));
+  }
+  function saveCustomFoods(a){
+    if(typeof setCF === 'function') setCF(a);
+    else localStorage.setItem('nf_cf', JSON.stringify(a));
+  }
+  function saveHabitsSafe(a){
+    if(typeof saveHabits === 'function') saveHabits(a);
+    else localStorage.setItem('vf_habits', JSON.stringify(a));
+  }
+  function saveHabitLogsSafe(a){
+    if(typeof saveHabitLogs === 'function') saveHabitLogs(a);
+    else localStorage.setItem('vf_habit_logs', JSON.stringify(a));
+  }
+
+  function applyBackup(data){
+    if(!data || !data.version || String(data.version).indexOf('VitalFlow') < 0){
+      alert('Invalid VitalFlow backup data.');
+      return false;
+    }
+    if(!confirm('This will replace current data on this device. Continue?')) return false;
+
+    if(data.state) saveState(data.state);
+    if(data.customFoods) saveCustomFoods(data.customFoods);
+    if(data.favorites){
+      window.favs = data.favorites;
+      localStorage.setItem('nf_favs', JSON.stringify(data.favorites));
+    }
+    if(data.habits) saveHabitsSafe(data.habits);
+    if(data.habitLogs) saveHabitLogsSafe(data.habitLogs);
+    if(data.profile) localStorage.setItem('nf_profile', JSON.stringify(data.profile));
+    if(data.goals){
+      if(data.goals.calGoal){
+        try { window.calGoal = data.goals.calGoal; } catch(e) {}
+        localStorage.setItem('nf_goal', data.goals.calGoal);
+      }
+      if(data.goals.macroGoals) localStorage.setItem('nf_mg', JSON.stringify(data.goals.macroGoals));
+      if(data.goals.customNutrient) localStorage.setItem('nf_cn', JSON.stringify(data.goals.customNutrient));
+      if(data.goals.wGoal){
+        try { window.wGoal = data.goals.wGoal; } catch(e) {}
+        localStorage.setItem('nf_wgoal', data.goals.wGoal);
+      }
+      if(data.goals.wMpg){
+        try { window.wMpg = data.goals.wMpg; } catch(e) {}
+        localStorage.setItem('nf_wml', data.goals.wMpg);
+      }
+    }
+    if(typeof data.points !== 'undefined') localStorage.setItem('nf_pts', data.points);
+    if(data.weights) localStorage.setItem('nf_weights', JSON.stringify(data.weights));
+    if(data.microGoals) localStorage.setItem('vf_micro_goals', JSON.stringify(data.microGoals));
+
+    alert('Data pasted and imported successfully. Reloading now.');
+    location.reload();
+    return true;
+  }
+
+  function parseBackupText(text){
+    try { return JSON.parse((text || '').trim()); }
+    catch(e){
+      alert('Could not read backup text. Make sure it starts with { and ends with }.');
+      return null;
+    }
+  }
+
+  function openCopyPanel(){
+    var old = byId('vf-copy-data-panel-v29');
+    if(old) old.remove();
+    var text = JSON.stringify(backupPayload(), null, 2);
+    var panel = document.createElement('div');
+    panel.id = 'vf-copy-data-panel-v29';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Copy Data</div><div style="font-size:11px;color:#a0a0b8;">Copy this on old device, paste on new device.</div></div>' +
+        '<button id="vf-cd-close-v29" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<textarea id="vf-cd-text-v29" readonly style="width:100%;height:150px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;"></textarea>' +
+      '<button id="vf-cd-copy-v29" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:9px;">Copy Data Text</button>' +
+      '<div id="vf-cd-note-v29" style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">After copying, paste it into Paste Data on the other device.</div>';
+    document.body.appendChild(panel);
+    byId('vf-cd-text-v29').value = text;
+    byId('vf-cd-close-v29').onclick = function(){ panel.remove(); };
+    byId('vf-cd-copy-v29').onclick = function(){ copyText(text, byId('vf-cd-note-v29')); };
+  }
+
+  function openPastePanel(){
+    var old = byId('vf-paste-data-panel-v29');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-paste-data-panel-v29';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Paste Data</div><div style="font-size:11px;color:#a0a0b8;">Paste copied VitalFlow data here.</div></div>' +
+        '<button id="vf-pd-close-v29" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<textarea id="vf-pd-text-v29" style="width:100%;height:190px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;" placeholder="Paste backup text here"></textarea>' +
+      '<button id="vf-pd-import-v29" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:9px;">Paste & Import Data</button>' +
+      '<div style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">This replaces current data on this device after confirmation.</div>';
+    document.body.appendChild(panel);
+    byId('vf-pd-close-v29').onclick = function(){ panel.remove(); };
+    byId('vf-pd-import-v29').onclick = function(){
+      var data = parseBackupText(byId('vf-pd-text-v29').value);
+      if(data) applyBackup(data);
+    };
+    byId('vf-pd-text-v29').focus();
+  }
+
+  function copyText(text, note){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        if(note) note.textContent = 'Copied. Now open the new device and use Paste Data.';
+      }).catch(function(){ fallbackCopy(note, 'vf-cd-text-v29'); });
+    } else {
+      fallbackCopy(note, 'vf-cd-text-v29');
+    }
+  }
+
+  function fallbackCopy(note, textareaId){
+    var ta = byId(textareaId);
+    if(ta){ ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); }
+    try {
+      document.execCommand('copy');
+      if(note) note.textContent = 'Copied. Now open the new device and use Paste Data.';
+    } catch(e) {
+      if(note) note.textContent = 'Select all text manually and copy it.';
+    }
+  }
+
+  window.vfCopyDataText = openCopyPanel;
+  window.vfPasteDataText = openPastePanel;
+
+  function addButtons(){
+    var more = byId('screen-more');
+    if(!more) return;
+    var cards = Array.prototype.slice.call(more.querySelectorAll('.card'));
+    var dataCard = cards.find(function(c){ return (c.textContent || '').indexOf('Data Backup') >= 0; });
+    if(!dataCard) return;
+
+    var oldPaste = byId('vf-paste-import-btn-v28');
+    if(oldPaste) oldPaste.style.display = 'none';
+
+    if(byId('vf-copy-paste-row-v29')) return;
+    var row = document.createElement('div');
+    row.id = 'vf-copy-paste-row-v29';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;';
+    row.innerHTML =
+      '<button type="button" onclick="vfCopyDataText()" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">Copy Data</button>' +
+      '<button type="button" onclick="vfPasteDataText()" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">Paste Data</button>';
+
+    var ref = byId('vf-share-backup-inline-v27') || dataCard.querySelector('input[type="file"]');
+    if(ref && ref.parentNode) ref.parentNode.insertBefore(row, ref.nextSibling);
+    else dataCard.appendChild(row);
+  }
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(addButtons, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', addButtons);
+  setTimeout(addButtons, 250);
+  setTimeout(addButtons, 1000);
+})();
+/* VITALFLOW_COPY_PASTE_BACKUP_V29_END */
+</script>
 </body>
 </html>
