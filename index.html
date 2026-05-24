@@ -7151,5 +7151,286 @@ window.__showInstall=function(){
 })();
 /* VITALFLOW_DIET_LABELS_V25_END */
 </script>
+
+<script>
+/* VITALFLOW_ANDROID_SHARE_BACKUP_V26_START */
+(function(){
+  if(window.__vfAndroidShareBackupV26) return;
+  window.__vfAndroidShareBackupV26 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+  function payload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null)
+    };
+  }
+  function backupText(){ return JSON.stringify(payload(), null, 2); }
+  function fileName(){ return 'VitalFlow-backup-' + todayKey() + '.json'; }
+
+  function showPanel(text){
+    var old = byId('vf-android-backup-panel-v26');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-android-backup-panel-v26';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Android backup ready</div><div style="font-size:11px;color:#a0a0b8;">Use Share first. If it fails, Copy the text.</div></div>' +
+        '<button id="vf-ab-close-v26" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+        '<button id="vf-ab-share-v26" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:11px;font-size:13px;font-weight:800;">Share Backup</button>' +
+        '<button id="vf-ab-copy-v26" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:11px;font-size:13px;font-weight:800;">Copy Text</button>' +
+      '</div>' +
+      '<textarea id="vf-ab-text-v26" readonly style="width:100%;height:120px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;"></textarea>' +
+      '<div id="vf-ab-note-v26" style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">After copying/sharing, save it in Drive/Notes/WhatsApp. This text is your full backup.</div>';
+    document.body.appendChild(panel);
+    byId('vf-ab-text-v26').value = text;
+    byId('vf-ab-close-v26').onclick = function(){ panel.remove(); };
+    byId('vf-ab-share-v26').onclick = function(){ shareBackup(text); };
+    byId('vf-ab-copy-v26').onclick = function(){ copyBackup(text); };
+  }
+
+  async function shareBackup(text){
+    var note = byId('vf-ab-note-v26');
+    try {
+      var name = fileName();
+      var f = new File([text], name, {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[f]})){
+        await navigator.share({files:[f], title:'VitalFlow Backup', text:'VitalFlow backup file'});
+        if(note) note.textContent = 'Shared as a JSON file.';
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({title:'VitalFlow Backup', text:text});
+        if(note) note.textContent = 'Shared as backup text.';
+        return;
+      }
+    } catch(e) {
+      if(note) note.textContent = 'Share failed or was cancelled. Use Copy Text below.';
+      return;
+    }
+    copyBackup(text);
+  }
+
+  function copyBackup(text){
+    var note = byId('vf-ab-note-v26');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        if(note) note.textContent = 'Copied. Paste it into Notes, Drive, WhatsApp, or Gmail.';
+      }).catch(function(){ fallbackCopy(note); });
+    } else {
+      fallbackCopy(note);
+    }
+  }
+
+  function fallbackCopy(note){
+    var ta = byId('vf-ab-text-v26');
+    if(ta){ ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); }
+    try {
+      document.execCommand('copy');
+      if(note) note.textContent = 'Copied. Paste it somewhere safe.';
+    } catch(e) {
+      if(note) note.textContent = 'Select all text manually and copy it.';
+    }
+  }
+
+  window.vfAndroidShareBackup = function(){
+    showPanel(backupText());
+  };
+
+  function addButton(){
+    if(byId('vf-android-share-card-v26')) return;
+    var more = byId('screen-more');
+    if(!more) return;
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'vf-android-share-card-v26';
+    card.style.borderColor = 'rgba(0,229,160,.35)';
+    card.innerHTML =
+      '<div class="card-title" style="margin-bottom:6px;color:#00e5a0;">Android Backup Share</div>' +
+      '<div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:10px;">Temporary helper for Android. It shares or copies your full VitalFlow backup.</div>' +
+      '<button onclick="vfAndroidShareBackup()" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;">Share / Copy Backup</button>';
+    var backupCard = Array.prototype.find.call(more.querySelectorAll('.card'), function(c){
+      return (c.textContent || '').indexOf('Data Backup') >= 0;
+    });
+    if(backupCard) more.insertBefore(card, backupCard);
+    else more.appendChild(card);
+  }
+
+  document.addEventListener('DOMContentLoaded', addButton);
+  setTimeout(addButton, 250);
+  setTimeout(addButton, 1000);
+})();
+/* VITALFLOW_ANDROID_SHARE_BACKUP_V26_END */
+</script>
+
+<script>
+/* VITALFLOW_ANDROID_SHARE_BACKUP_V27_START */
+(function(){
+  if(window.__vfAndroidShareBackupV27) return;
+  window.__vfAndroidShareBackupV27 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+  function backupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null)
+    };
+  }
+  function fileName(){ return 'VitalFlow-backup-' + todayKey() + '.json'; }
+  function backupText(){ return JSON.stringify(backupPayload(), null, 2); }
+
+  function showBackupPanel(){
+    var text = backupText();
+    var old = byId('vf-android-backup-panel-v27');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-android-backup-panel-v27';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Backup ready</div><div style="font-size:11px;color:#a0a0b8;">Share first. If it fails, copy the text.</div></div>' +
+        '<button id="vf-ab-close-v27" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+        '<button id="vf-ab-share-v27" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:11px;font-size:13px;font-weight:800;">Share Backup</button>' +
+        '<button id="vf-ab-copy-v27" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:11px;font-size:13px;font-weight:800;">Copy Text</button>' +
+      '</div>' +
+      '<textarea id="vf-ab-text-v27" readonly style="width:100%;height:120px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;"></textarea>' +
+      '<div id="vf-ab-note-v27" style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">This includes all app data. Save it somewhere safe.</div>';
+    document.body.appendChild(panel);
+    byId('vf-ab-text-v27').value = text;
+    byId('vf-ab-close-v27').onclick = function(){ panel.remove(); };
+    byId('vf-ab-share-v27').onclick = function(){ shareBackup(text); };
+    byId('vf-ab-copy-v27').onclick = function(){ copyBackup(text); };
+  }
+
+  async function shareBackup(text){
+    var note = byId('vf-ab-note-v27');
+    try {
+      var name = fileName();
+      var f = new File([text], name, {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[f]})){
+        await navigator.share({files:[f], title:'VitalFlow Backup', text:'VitalFlow backup file'});
+        if(note) note.textContent = 'Shared as JSON file.';
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({title:'VitalFlow Backup', text:text});
+        if(note) note.textContent = 'Shared as backup text.';
+        return;
+      }
+    } catch(e) {
+      if(note) note.textContent = 'Share failed or was cancelled. Use Copy Text.';
+      return;
+    }
+    copyBackup(text);
+  }
+
+  function copyBackup(text){
+    var note = byId('vf-ab-note-v27');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        if(note) note.textContent = 'Copied. Paste into Notes, Drive, WhatsApp, or Gmail.';
+      }).catch(function(){ fallbackCopy(note); });
+    } else {
+      fallbackCopy(note);
+    }
+  }
+
+  function fallbackCopy(note){
+    var ta = byId('vf-ab-text-v27');
+    if(ta){ ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); }
+    try {
+      document.execCommand('copy');
+      if(note) note.textContent = 'Copied. Paste it somewhere safe.';
+    } catch(e) {
+      if(note) note.textContent = 'Select all text manually and copy it.';
+    }
+  }
+
+  window.vfAndroidShareBackup = showBackupPanel;
+  window.exportData = showBackupPanel;
+
+  function addButtonNearBackup(){
+    if(byId('vf-share-backup-inline-v27')) return;
+    var more = byId('screen-more');
+    if(!more) return;
+    var cards = Array.prototype.slice.call(more.querySelectorAll('.card'));
+    var dataCard = cards.find(function(c){ return (c.textContent || '').indexOf('Data Backup') >= 0; });
+    if(!dataCard) return;
+    var row = dataCard.querySelector('div[style*="display:flex"][style*="gap:8px"]') || dataCard.querySelector('div');
+    var btn = document.createElement('button');
+    btn.id = 'vf-share-backup-inline-v27';
+    btn.type = 'button';
+    btn.textContent = 'Share Backup';
+    btn.onclick = showBackupPanel;
+    btn.style.cssText = 'width:100%;background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px;';
+    if(row && row.parentNode) row.parentNode.insertBefore(btn, row.nextSibling);
+    else dataCard.appendChild(btn);
+  }
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(addButtonNearBackup, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', addButtonNearBackup);
+  setTimeout(addButtonNearBackup, 250);
+  setTimeout(addButtonNearBackup, 1000);
+})();
+/* VITALFLOW_ANDROID_SHARE_BACKUP_V27_END */
+</script>
 </body>
 </html>
