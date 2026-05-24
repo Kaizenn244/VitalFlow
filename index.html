@@ -5830,5 +5830,1326 @@ window.__showInstall=function(){
     setTimeout(rerenderHabitAreas, 80);
   });
 })();
-</script></body>
+</script>
+<script>
+</script>
+
+<script>
+/* VITALFLOW_BAD_HABIT_RELAPSE_FIX_V19_START */
+(function(){
+  if(window.__vfBadHabitRelapseFixV19) return;
+  window.__vfBadHabitRelapseFixV19 = true;
+
+  var oldLogHabitToday = window.logHabitToday;
+  var oldGetHabitStreak = window.getHabitStreak;
+
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+
+  function writeJSON(key, value){
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function habits(){
+    if(typeof getHabits === 'function') return getHabits();
+    return readJSON('vf_habits', []);
+  }
+
+  function logs(){
+    if(typeof getHabitLogs === 'function') return getHabitLogs();
+    return readJSON('vf_habit_logs', {});
+  }
+
+  function saveLogs(value){
+    if(typeof saveHabitLogs === 'function') saveHabitLogs(value);
+    else writeJSON('vf_habit_logs', value);
+  }
+
+  function adjustments(){
+    return readJSON('vf_habit_streak_adjustments', {});
+  }
+
+  function saveAdjustments(value){
+    writeJSON('vf_habit_streak_adjustments', value);
+  }
+
+  function addAdjustment(id, amount){
+    var a = adjustments();
+    a[id] = Math.max(0, (parseInt(a[id] || 0, 10) || 0) + amount);
+    saveAdjustments(a);
+  }
+
+  function rawBadHabitStreak(id){
+    var l = logs();
+    var streak = 0;
+    var d = new Date();
+
+    for(var i = 0; i < 365; i++){
+      var k = d.toISOString().slice(0,10);
+      var status = (l[k] || {})[id];
+
+      if(status === 'maintained' || status === 'done'){
+        streak++;
+      } else if(!status && i === 0) {
+        // Today has not been logged yet, so keep showing the previous streak.
+      } else {
+        break;
+      }
+
+      d.setDate(d.getDate() - 1);
+    }
+
+    return streak;
+  }
+
+  function adjustedBadHabitStreak(id){
+    var raw = rawBadHabitStreak(id);
+    var a = adjustments();
+    var penalty = parseInt(a[id] || 0, 10) || 0;
+    return Math.max(0, raw - penalty);
+  }
+
+  window.getHabitStreak = function(id, type){
+    if(type === 'bad') return adjustedBadHabitStreak(id);
+    if(typeof oldGetHabitStreak === 'function') return oldGetHabitStreak(id, type);
+    return 0;
+  };
+
+  function spendRankPoints(n){
+    if(typeof spendPoints === 'function'){
+      spendPoints(n);
+      return;
+    }
+    var current = parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0;
+    localStorage.setItem('nf_pts', String(current - n));
+  }
+
+  function earnRankPoints(n){
+    if(typeof addPoints === 'function'){
+      addPoints(n);
+      return;
+    }
+    var current = parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0;
+    localStorage.setItem('nf_pts', String(current + n));
+  }
+
+  function refreshHabitUi(){
+    if(typeof renderHabits === 'function') renderHabits();
+    if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+  }
+
+  function toast(msg, color){
+    var el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;left:14px;right:14px;bottom:82px;z-index:9999;background:rgba(13,13,24,.96);border:1px solid '+color+';color:#f0f0f0;border-radius:12px;padding:11px 13px;font-size:12px;font-weight:600;box-shadow:0 10px 28px rgba(0,0,0,.35);';
+    document.body.appendChild(el);
+    setTimeout(function(){
+      el.style.opacity = '0';
+      el.style.transition = 'opacity .35s ease';
+      setTimeout(function(){ el.remove(); }, 400);
+    }, 2600);
+  }
+
+  window.logHabitToday = function(id, status){
+    var allHabits = habits();
+    var hab = allHabits.find(function(h){ return h.id === id; });
+
+    if(!hab || hab.type !== 'bad'){
+      if(typeof oldLogHabitToday === 'function') return oldLogHabitToday(id, status);
+      return;
+    }
+
+    var tk = todayKey();
+    var l = logs();
+    if(!l[tk]) l[tk] = {};
+
+    var previous = l[tk][id];
+
+    if(previous === status){
+      delete l[tk][id];
+      saveLogs(l);
+      refreshHabitUi();
+      return;
+    }
+
+    if(status === 'maintained'){
+      l[tk][id] = 'maintained';
+      saveLogs(l);
+      if(previous !== 'maintained') earnRankPoints(hab.pts || 5);
+      refreshHabitUi();
+      return;
+    }
+
+    if(status === 'relapsed'){
+      var streak = adjustedBadHabitStreak(id);
+      var severity = hab.severity || 'normal';
+
+      l[tk][id] = 'relapsed';
+      saveLogs(l);
+
+      if(severity === 'serious'){
+        if(streak > 0){
+          addAdjustment(id, streak);
+          toast('Serious relapse: streak dropped to 0. Rank points are safe until another relapse at 0.', '#ff5252');
+        } else {
+          spendRankPoints(15);
+          toast('Serious relapse at 0 streak: -15 rank points.', '#ff5252');
+        }
+      } else if(severity === 'moderate'){
+        var drop = Math.min(3, Math.max(1, streak));
+        addAdjustment(id, drop);
+        toast('Moderate relapse: streak reduced by '+drop+' day'+(drop === 1 ? '' : 's')+'.', '#ffa726');
+      } else {
+        var normalDrop = Math.min(1, Math.max(0, streak));
+        if(normalDrop > 0) addAdjustment(id, normalDrop);
+        toast('Relapse logged: streak reduced slightly.', '#ffa726');
+      }
+
+      refreshHabitUi();
+      return;
+    }
+
+    if(typeof oldLogHabitToday === 'function') return oldLogHabitToday(id, status);
+  };
+})();
+/* VITALFLOW_BAD_HABIT_RELAPSE_FIX_V19_END */
+</script>
+
+<script>
+/* VITALFLOW_EXPORT_WORKOUT_DIET_V20_START */
+(function(){
+  if(window.__vfExportWorkoutDietV20) return;
+  window.__vfExportWorkoutDietV20 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+  function state(){
+    if(typeof gS === 'function') return gS();
+    return readJSON('nf_s', {});
+  }
+  function saveState(s){
+    if(typeof sS === 'function') sS(s);
+    else localStorage.setItem('nf_s', JSON.stringify(s));
+  }
+  function customFoods(){
+    if(typeof getCF === 'function') return getCF();
+    return readJSON('nf_cf', []);
+  }
+  function habitList(){
+    if(typeof getHabits === 'function') return getHabits();
+    return readJSON('vf_habits', []);
+  }
+  function habitLogs(){
+    if(typeof getHabitLogs === 'function') return getHabitLogs();
+    return readJSON('vf_habit_logs', {});
+  }
+  function profile(){
+    if(typeof getProfile === 'function') return getProfile();
+    return readJSON('nf_profile', {});
+  }
+  function macroGoals(){
+    if(typeof getMacroGoals === 'function') return getMacroGoals();
+    return readJSON('nf_mg', {protein:150,carbs:300,fats:80});
+  }
+  function customNutrient(){
+    if(typeof getCustomNutrient === 'function') return getCustomNutrient();
+    return readJSON('nf_cn', null);
+  }
+  function points(){
+    if(typeof getPoints === 'function') return getPoints();
+    return parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0;
+  }
+
+  function makeBackupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:state(),
+      customFoods:customFoods(),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:habitList(),
+      habitLogs:habitLogs(),
+      profile:profile(),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:macroGoals(),
+        customNutrient:customNutrient(),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:points(),
+      weights:readJSON('nf_weights', [])
+    };
+  }
+
+  function showExportPanel(text, fileName){
+    var old = byId('vf-export-panel-v20');
+    if(old) old.remove();
+
+    var panel = document.createElement('div');
+    panel.id = 'vf-export-panel-v20';
+    panel.style.cssText = 'position:fixed;left:12px;right:12px;bottom:76px;z-index:99999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.35);border-radius:16px;padding:13px;box-shadow:0 18px 50px rgba(0,0,0,.5);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Backup ready</div><div style="font-size:11px;color:#a0a0b8;">On Android, use Share or Copy if Download does not open.</div></div>' +
+        '<button id="vf-export-close-v20" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">' +
+        '<button id="vf-export-download-v20" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:10px;font-size:12px;font-weight:700;">Download</button>' +
+        '<button id="vf-export-share-v20" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:700;">Share</button>' +
+        '<button id="vf-export-copy-v20" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:10px;font-size:12px;font-weight:700;">Copy</button>' +
+      '</div>' +
+      '<textarea id="vf-export-text-v20" readonly style="width:100%;height:96px;background:#080810;border:1px solid rgba(255,255,255,.1);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;"></textarea>' +
+      '<div id="vf-export-note-v20" style="font-size:10px;color:#5a5a7a;margin-top:6px;">Keep this JSON safe. Import it from More > Data Backup.</div>';
+
+    document.body.appendChild(panel);
+    byId('vf-export-text-v20').value = text;
+    byId('vf-export-close-v20').onclick = function(){ panel.remove(); };
+    byId('vf-export-download-v20').onclick = function(){ downloadBackup(text, fileName); };
+    byId('vf-export-share-v20').onclick = function(){ shareBackup(text, fileName); };
+    byId('vf-export-copy-v20').onclick = function(){ copyBackup(text); };
+  }
+
+  function downloadBackup(text, fileName){
+    try {
+      var blob = new Blob([text], {type:'application/json;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 800);
+      return true;
+    } catch(e) {
+      return false;
+    }
+  }
+
+  async function shareBackup(text, fileName){
+    try {
+      var file = new File([text], fileName, {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'VitalFlow Backup'});
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({title:'VitalFlow Backup', text:text});
+        return;
+      }
+    } catch(e) {}
+    copyBackup(text);
+  }
+
+  function copyBackup(text){
+    var note = byId('vf-export-note-v20');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){
+        if(note) note.textContent = 'Copied. Paste it into Notes/Drive/WhatsApp to save it.';
+      }).catch(function(){ fallbackCopy(text, note); });
+    } else {
+      fallbackCopy(text, note);
+    }
+  }
+
+  function fallbackCopy(text, note){
+    var ta = byId('vf-export-text-v20');
+    if(ta){ ta.focus(); ta.select(); }
+    try { document.execCommand('copy'); if(note) note.textContent = 'Copied. Paste it somewhere safe.'; }
+    catch(e){ if(note) note.textContent = 'Select the backup text and copy it manually.'; }
+  }
+
+  window.exportData = function(){
+    var fileName = 'VitalFlow-backup-' + todayKey() + '.json';
+    var text = JSON.stringify(makeBackupPayload(), null, 2);
+    showExportPanel(text, fileName);
+    downloadBackup(text, fileName);
+  };
+
+  function selectedMuscles(){
+    var checked = Array.prototype.slice.call(document.querySelectorAll('.vf-muscle-check-v20:checked'));
+    return checked.map(function(el){ return el.value; });
+  }
+
+  function setupWorkoutUi(){
+    var titles = Array.prototype.slice.call(document.querySelectorAll('.section-title'));
+    titles.forEach(function(el){
+      if((el.textContent || '').indexOf('Aaj ki Workout') >= 0) el.textContent = 'Workout Day';
+    });
+
+    var typeSel = byId('wo-type');
+    if(typeSel && !typeSel.__vfV20Types){
+      typeSel.__vfV20Types = true;
+      [
+        ['Calisthenics','Calisthenics'],
+        ['Rest Day','Rest Day']
+      ].forEach(function(item){
+        if(!Array.prototype.some.call(typeSel.options, function(o){ return o.value === item[0]; })){
+          var opt = document.createElement('option');
+          opt.value = item[0];
+          opt.textContent = item[1];
+          typeSel.appendChild(opt);
+        }
+      });
+    }
+
+    var muscleSel = byId('wo-muscle');
+    if(muscleSel && !byId('vf-muscle-grid-v20')){
+      muscleSel.style.display = 'none';
+      var wrap = document.createElement('div');
+      wrap.id = 'vf-muscle-grid-v20';
+      wrap.style.cssText = 'display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:8px;';
+      var muscles = ['Full Body','Chest','Back','Legs','Shoulders','Arms','Core','Cardio'];
+      wrap.innerHTML = muscles.map(function(m, i){
+        return '<label style="display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:9px 10px;font-size:12px;color:var(--text2);">' +
+          '<input class="vf-muscle-check-v20" type="checkbox" value="'+m+'" '+(i===0?'checked':'')+' style="accent-color:#00e5a0;">' +
+          '<span>'+m+'</span>' +
+        '</label>';
+      }).join('');
+      muscleSel.parentNode.insertBefore(wrap, muscleSel.nextSibling);
+      wrap.addEventListener('change', function(e){
+        if(!e.target.classList.contains('vf-muscle-check-v20')) return;
+        if(e.target.value !== 'Full Body' && e.target.checked){
+          var fb = wrap.querySelector('input[value="Full Body"]');
+          if(fb) fb.checked = false;
+        }
+        if(e.target.value === 'Full Body' && e.target.checked){
+          Array.prototype.forEach.call(wrap.querySelectorAll('input'), function(inp){
+            if(inp.value !== 'Full Body') inp.checked = false;
+          });
+        }
+      });
+    }
+  }
+
+  window.openWorkoutModal = function(){
+    var modal = byId('workout-modal');
+    if(modal) modal.classList.add('open');
+    setupWorkoutUi();
+  };
+
+  window.saveWorkout = function(){
+    var type = byId('wo-type') ? byId('wo-type').value : 'Strength';
+    var name = byId('wo-name') ? byId('wo-name').value.trim() : '';
+    if(type === 'Rest Day' && !name) name = 'Rest Day';
+    if(!name){ alert('Workout ka naam dalo!'); return; }
+
+    var muscles = selectedMuscles();
+    if(!muscles.length && byId('wo-muscle')) muscles = [byId('wo-muscle').value || 'Full Body'];
+
+    var w = {
+      name:name,
+      type:type,
+      muscle:muscles.join(' + '),
+      duration:type === 'Rest Day' ? 0 : (parseInt((byId('wo-dur') || {}).value, 10) || 0),
+      cal:type === 'Rest Day' ? 0 : (parseInt((byId('wo-cal') || {}).value, 10) || 0),
+      notes:(byId('wo-notes') ? byId('wo-notes').value.trim() : '')
+    };
+
+    var s = typeof gT === 'function' ? gT() : state();
+    var tk = todayKey();
+    if(!s[tk]) s[tk] = {meals:[],waterMl:0,workouts:[]};
+    if(!s[tk].workouts) s[tk].workouts = [];
+    s[tk].workouts.push(w);
+    saveState(s);
+
+    if(typeof updateUI === 'function') updateUI();
+    if(typeof closeWorkoutModal === 'function') closeWorkoutModal();
+  };
+
+  function setupDietUi(){
+    var goal = byId('pl-goal');
+    if(goal && !goal.__vfDietV20){
+      goal.__vfDietV20 = true;
+      goal.innerHTML =
+        '<option value="bulk">Bulk (+500 kcal)</option>' +
+        '<option value="leanbulk">Lean bulk (+250 kcal)</option>' +
+        '<option value="maintain">Maintain</option>' +
+        '<option value="leancut">Lean cut (-250 kcal)</option>' +
+        '<option value="lose">Calorie deficit / cut (-500 kcal)</option>';
+    }
+
+    var planner = byId('screen-planner');
+    if(planner && !byId('vf-diet-tips-v20')){
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'vf-diet-tips-v20';
+      card.innerHTML =
+        '<div class="card-title" style="color:#00e5a0;">Practical diet notes</div>' +
+        '<div style="font-size:12px;color:#a0a0b8;line-height:1.7;">Choose a smaller surplus/deficit if the plan feels hard to follow. Keep 2-3 repeatable meals, one flexible snack, and use home foods you can actually eat daily.</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px;">' +
+          '<div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.14);border-radius:10px;padding:9px;"><b style="font-size:11px;color:#00e5a0;">Lean bulk</b><div style="font-size:10px;color:#888;margin-top:3px;">Slow muscle gain with less fat. Best if appetite is normal.</div></div>' +
+          '<div style="background:rgba(255,159,28,.06);border:1px solid rgba(255,159,28,.14);border-radius:10px;padding:9px;"><b style="font-size:11px;color:#ff9f1c;">Lean cut</b><div style="font-size:10px;color:#888;margin-top:3px;">Small deficit, easier workouts, less hunger.</div></div>' +
+          '<div style="background:rgba(0,180,216,.06);border:1px solid rgba(0,180,216,.14);border-radius:10px;padding:9px;"><b style="font-size:11px;color:#00b4d8;">Cut</b><div style="font-size:10px;color:#888;margin-top:3px;">Faster fat loss. Keep protein high and steps consistent.</div></div>' +
+          '<div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.14);border-radius:10px;padding:9px;"><b style="font-size:11px;color:#a78bfa;">Bulk</b><div style="font-size:10px;color:#888;margin-top:3px;">Use when weight is stuck and training is intense.</div></div>' +
+        '</div>';
+      var result = byId('bmi-result');
+      if(result) planner.insertBefore(card, result);
+      else planner.appendChild(card);
+    }
+  }
+
+  function mealTemplates(goal, diet){
+    var veg = diet === 'veg';
+    var egg = diet === 'eggetarian';
+    var proteinA = veg ? 'Paneer / tofu / dal' : (egg ? 'Eggs + paneer / dal' : 'Chicken / eggs / paneer');
+    var proteinB = veg ? 'Soya chunks / curd' : (egg ? 'Egg bhurji / curd' : 'Chicken curry / fish / eggs');
+    var snack = goal === 'lose' || goal === 'leancut' ? 'Dahi + fruit or bhuna chana' : 'Milk shake + peanuts or paneer sandwich';
+    return [
+      {time:'Breakfast', item:'Poha/upma/oats + '+proteinA, note:'Keep this simple and repeatable.'},
+      {time:'Lunch', item:'Rice or roti + dal + sabzi + '+proteinB, note:'Add salad/curd for fullness.'},
+      {time:'Snack', item:snack, note:'Use this to fix protein/calorie gaps.'},
+      {time:'Dinner', item:'Roti/rice + vegetables + '+proteinA, note:'Lighter if sleep feels heavy.'}
+    ];
+  }
+
+  window.generatePlan = function(){
+    setupDietUi();
+    var age = parseInt((byId('pl-age') || {}).value, 10) || 22;
+    var weight = parseFloat((byId('pl-weight') || {}).value);
+    var height = parseFloat((byId('pl-height') || {}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goal = byId('pl-goal') ? byId('pl-goal').value : 'maintain';
+    if(!weight || !height){ alert('Weight aur height dalo!'); return; }
+
+    var offsets = {bulk:500, leanbulk:250, maintain:0, leancut:-250, lose:-500};
+    var labels = {
+      bulk:'Bulk plan',
+      leanbulk:'Lean bulk plan',
+      maintain:'Maintenance plan',
+      leancut:'Lean cut plan',
+      lose:'Calorie deficit / cut plan'
+    };
+    var bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var tCal = Math.max(1200, tdee + (offsets[goal] || 0));
+    var protein = Math.round(weight * ((goal === 'bulk' || goal === 'leanbulk') ? 2.0 : (goal === 'lose' || goal === 'leancut') ? 2.2 : 1.8));
+    var fats = Math.round(tCal * 0.27 / 9);
+    var carbs = Math.max(80, Math.round((tCal - protein*4 - fats*9) / 4));
+
+    window.planCalResult = tCal;
+    var bmiColor = bmi < 18.5 ? '#29b6f6' : bmi < 25 ? '#00e5a0' : bmi < 30 ? '#ffa726' : '#ff5252';
+    var bmiCat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy' : bmi < 30 ? 'Overweight' : 'High';
+    var bmiDesc = bmi < 18.5 ? 'Use lean bulk or bulk carefully.' : bmi < 25 ? 'Good range. Pick goal by performance.' : bmi < 30 ? 'Lean cut may be easier than aggressive cut.' : 'Use a steady deficit and consider professional advice.';
+
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = bmi;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+bmiColor+'22;color:'+bmiColor+';border:1px solid '+bmiColor+'44;">'+bmiCat+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = bmiDesc;
+    if(byId('plan-cal')) byId('plan-cal').textContent = tCal;
+    if(byId('plan-protein')) byId('plan-protein').textContent = protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = fats+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = labels[goal] + ': practical Indian meal structure';
+
+    var p = profile();
+    var meals = mealTemplates(goal, p.diet || 'nonveg');
+    if(byId('plan-meals-list')){
+      byId('plan-meals-list').innerHTML = meals.map(function(m){
+        return '<div class="plan-meal-card">' +
+          '<div class="plan-meal-time">'+m.time+'</div>' +
+          '<div style="font-size:13px;color:#e0e0e0;font-weight:600;">'+m.item+'</div>' +
+          '<div style="font-size:11px;color:#888;line-height:1.5;margin-top:4px;">'+m.note+'</div>' +
+        '</div>';
+      }).join('');
+    }
+    if(byId('plan-tips')){
+      var tips = [
+        'Do not change every meal at once. Lock breakfast and lunch first.',
+        'Protein target matters more than fancy foods. Dal, eggs, paneer, curd, chicken, soya all count.',
+        'For cuts, reduce oil/sweets first before cutting rice or roti too hard.',
+        'For bulks, add liquid calories only if normal meals feel too heavy.',
+        'Track weekly weight average, not one random day.'
+      ];
+      byId('plan-tips').innerHTML = tips.map(function(t){ return '- '+t; }).join('<br>');
+    }
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    setupWorkoutUi();
+    setupDietUi();
+  });
+  setTimeout(function(){
+    setupWorkoutUi();
+    setupDietUi();
+  }, 300);
+})();
+/* VITALFLOW_EXPORT_WORKOUT_DIET_V20_END */
+</script>
+
+<script>
+/* VITALFLOW_WORKOUT_UI_V21_START */
+(function(){
+  if(window.__vfWorkoutUiV21) return;
+  window.__vfWorkoutUiV21 = true;
+
+  function byId(id){ return document.getElementById(id); }
+
+  function fixWorkoutHeading(){
+    var titles = Array.prototype.slice.call(document.querySelectorAll('.section-title'));
+    titles.forEach(function(el){
+      var txt = (el.textContent || '').trim();
+      if(txt === 'Workout Day' || txt.indexOf('Aaj ki Workout') >= 0 || txt.indexOf('Workout Day') >= 0){
+        el.textContent = '\uD83C\uDFCB\uFE0F Workout Day';
+      }
+    });
+  }
+
+  function updateChipVisuals(wrap){
+    Array.prototype.forEach.call(wrap.querySelectorAll('.vf-muscle-chip-v21'), function(btn){
+      var input = wrap.querySelector('input[value="'+btn.dataset.value+'"]');
+      var active = input && input.checked;
+      btn.style.background = active ? 'linear-gradient(135deg, rgba(0,229,160,.22), rgba(0,180,216,.14))' : 'rgba(255,255,255,.04)';
+      btn.style.borderColor = active ? 'rgba(0,229,160,.55)' : 'rgba(255,255,255,.10)';
+      btn.style.color = active ? '#00e5a0' : 'var(--text2)';
+      btn.style.boxShadow = active ? '0 0 12px rgba(0,229,160,.12)' : 'none';
+    });
+  }
+
+  function setupWorkoutMuscleChips(){
+    var wrap = byId('vf-muscle-grid-v20');
+    if(!wrap) return;
+
+    if(wrap.dataset.v21 === 'done'){
+      updateChipVisuals(wrap);
+      return;
+    }
+    wrap.dataset.v21 = 'done';
+    wrap.style.display = 'flex';
+    wrap.style.flexWrap = 'wrap';
+    wrap.style.gap = '7px';
+    wrap.style.marginBottom = '8px';
+
+    var muscles = ['Full Body','Chest','Back','Legs','Shoulders','Arms','Core','Cardio'];
+    wrap.innerHTML = muscles.map(function(m, i){
+      return '<input class="vf-muscle-check-v20" type="checkbox" value="'+m+'" '+(i===0?'checked':'')+' style="display:none;">' +
+        '<button type="button" class="vf-muscle-chip-v21" data-value="'+m+'" style="border:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.04);color:var(--text2);border-radius:999px;padding:8px 12px;font-size:12px;font-weight:700;font-family:inherit;white-space:nowrap;cursor:pointer;">'+m+'</button>';
+    }).join('');
+
+    wrap.addEventListener('click', function(e){
+      var btn = e.target.closest('.vf-muscle-chip-v21');
+      if(!btn) return;
+      var val = btn.dataset.value;
+      var input = wrap.querySelector('input[value="'+val+'"]');
+      if(!input) return;
+
+      if(val === 'Full Body'){
+        Array.prototype.forEach.call(wrap.querySelectorAll('input'), function(inp){
+          inp.checked = inp.value === 'Full Body';
+        });
+      } else {
+        var full = wrap.querySelector('input[value="Full Body"]');
+        if(full) full.checked = false;
+        input.checked = !input.checked;
+        var any = Array.prototype.some.call(wrap.querySelectorAll('input'), function(inp){ return inp.checked; });
+        if(!any && full) full.checked = true;
+      }
+      updateChipVisuals(wrap);
+    });
+
+    updateChipVisuals(wrap);
+  }
+
+  function setup(){
+    fixWorkoutHeading();
+    setupWorkoutMuscleChips();
+  }
+
+  var oldOpenWorkoutModal = window.openWorkoutModal;
+  window.openWorkoutModal = function(){
+    if(typeof oldOpenWorkoutModal === 'function') oldOpenWorkoutModal();
+    else {
+      var modal = byId('workout-modal');
+      if(modal) modal.classList.add('open');
+    }
+    setTimeout(setup, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', setup);
+  setTimeout(setup, 250);
+  setTimeout(setup, 1000);
+})();
+/* VITALFLOW_WORKOUT_UI_V21_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_COACH_V22_START */
+(function(){
+  if(window.__vfDietCoachV22) return;
+  window.__vfDietCoachV22 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function profile(){
+    try {
+      if(typeof getProfile === 'function') return getProfile();
+      return JSON.parse(localStorage.getItem('nf_profile') || '{}');
+    } catch(e){ return {}; }
+  }
+
+  var GOALS = {
+    bulk:{label:'Bulk', offset:500, protein:[1.6,2.0], fat:[0.8,1.0], pace:'fastest muscle gain, higher fat-gain risk'},
+    leanbulk:{label:'Lean Bulk', offset:250, protein:[1.8,2.1], fat:[0.8,1.0], pace:'slow aesthetic muscle gain with less fat'},
+    maintain:{label:'Maintain / Recomp', offset:0, protein:[1.6,2.0], fat:[0.7,1.0], pace:'best for beginners or healthy-BMI recomposition'},
+    leancut:{label:'Lean Cut', offset:-300, protein:[2.0,2.2], fat:[0.7,0.9], pace:'steady fat loss while keeping performance'},
+    lose:{label:'Cut', offset:-500, protein:[2.0,2.3], fat:[0.6,0.8], pace:'faster fat loss, harder recovery'}
+  };
+
+  var EXERCISES = {
+    gym:{
+      Chest:['Barbell bench press','Incline dumbbell press','Chest press machine','Pec deck fly','Cable fly','Weighted dips'],
+      Back:['Lat pulldown','Seated cable row','Chest-supported row','Bent-over row','One-arm dumbbell row','Assisted pull-up'],
+      Shoulders:['Overhead press','Dumbbell shoulder press','Lateral raise','Rear delt fly','Face pull','Machine shoulder press'],
+      Legs:['Squat or hack squat','Leg press','Romanian deadlift','Leg extension','Hamstring curl','Standing calf raise'],
+      Arms:['Barbell curl','Incline dumbbell curl','Hammer curl','Triceps pushdown','Overhead triceps extension','Close-grip bench press'],
+      Core:['Cable crunch','Hanging knee raise','Ab wheel rollout','Pallof press','Reverse crunch','Plank']
+    },
+    calisthenics:{
+      Chest:['Push-up','Decline push-up','Diamond push-up','Archer push-up','Dips','Pseudo planche push-up'],
+      Back:['Pull-up','Chin-up','Inverted row','Australian pull-up','Scapular pull-up','Towel row'],
+      Shoulders:['Pike push-up','Wall handstand hold','Wall walk','Handstand push-up progression','Planche lean','Hindu push-up'],
+      Legs:['Bodyweight squat','Bulgarian split squat','Walking lunge','Jump squat','Pistol squat progression','Glute bridge'],
+      Arms:['Chin-up','Diamond push-up','Bench dip','Bodyweight triceps extension','Close-grip push-up','Ring/towel curl'],
+      Core:['Hollow body hold','Plank','Side plank','Hanging knee raise','L-sit progression','Leg raise']
+    },
+    home:{
+      Chest:['Push-up','Deficit push-up','Floor dumbbell press','Dumbbell fly','Resistance-band press','Chair dips'],
+      Back:['One-arm backpack row','Resistance-band row','Prone Y raise','Reverse snow angel','Towel row','Dumbbell row'],
+      Shoulders:['Pike push-up','Dumbbell shoulder press','Lateral raise','Rear delt raise','Wall walk','Band face pull'],
+      Legs:['Goblet squat','Split squat','Walking lunge','Romanian deadlift','Glute bridge','Calf raise'],
+      Arms:['Dumbbell curl','Hammer curl','Band curl','Chair dip','Overhead extension','Close-grip push-up'],
+      Core:['Plank','Dead bug','Reverse crunch','Mountain climber','Leg raise','Side plank']
+    }
+  };
+
+  function setupDietCoachUi(){
+    var goal = byId('pl-goal');
+    if(goal){
+      goal.innerHTML =
+        '<option value="leanbulk">Lean Bulk - aesthetic muscle</option>' +
+        '<option value="bulk">Bulk - faster size gain</option>' +
+        '<option value="maintain">Maintain / Recomp</option>' +
+        '<option value="leancut">Lean Cut - definition</option>' +
+        '<option value="lose">Cut - fat loss</option>';
+    }
+
+    if(byId('vf-diet-coach-fields-v22')) return;
+    if(!goal || !goal.parentNode) return;
+
+    var box = document.createElement('div');
+    box.id = 'vf-diet-coach-fields-v22';
+    box.style.cssText = 'border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px;';
+    box.innerHTML =
+      '<div style="font-size:10px;color:#555;margin-bottom:3px;">Main physique goal</div>' +
+      '<select class="sel" id="vf-aim-v22">' +
+        '<option value="aesthetic">Aesthetic lean muscle</option>' +
+        '<option value="muscle">Build muscle</option>' +
+        '<option value="fatloss">Fat loss</option>' +
+        '<option value="strength">Strength</option>' +
+        '<option value="fitness">General fitness</option>' +
+      '</select>' +
+      '<div class="grid2" style="margin-bottom:8px;">' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Training type</div><select class="sel" id="vf-training-v22" style="margin:0;"><option value="gym">Gym</option><option value="calisthenics">Calisthenics</option><option value="home">Home workout</option><option value="mixed">Mixed</option></select></div>' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Days/week</div><input class="inp" id="vf-train-days-v22" type="number" min="1" max="7" value="4" style="margin:0;"></div>' +
+      '</div>' +
+      '<div style="font-size:10px;color:#555;margin-bottom:6px;">Focus muscles</div>' +
+      '<div id="vf-focus-chips-v22" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px;"></div>';
+
+    goal.parentNode.insertBefore(box, goal.nextSibling);
+
+    var chips = byId('vf-focus-chips-v22');
+    ['Chest','Back','Shoulders','Legs','Arms','Core'].forEach(function(m, i){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.value = m;
+      btn.textContent = m;
+      btn.style.cssText = 'background:'+(i<3?'rgba(0,229,160,.16)':'rgba(255,255,255,.04)')+';border:1px solid '+(i<3?'rgba(0,229,160,.45)':'rgba(255,255,255,.1)')+';color:'+(i<3?'#00e5a0':'var(--text2)')+';border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;font-family:inherit;';
+      btn.dataset.active = i < 3 ? '1' : '0';
+      btn.onclick = function(){
+        var active = btn.dataset.active === '1';
+        btn.dataset.active = active ? '0' : '1';
+        btn.style.background = active ? 'rgba(255,255,255,.04)' : 'rgba(0,229,160,.16)';
+        btn.style.borderColor = active ? 'rgba(255,255,255,.1)' : 'rgba(0,229,160,.45)';
+        btn.style.color = active ? 'var(--text2)' : '#00e5a0';
+      };
+      chips.appendChild(btn);
+    });
+  }
+
+  function selectedFocus(){
+    var chips = byId('vf-focus-chips-v22');
+    if(!chips) return ['Chest','Back','Shoulders'];
+    var arr = Array.prototype.slice.call(chips.querySelectorAll('button')).filter(function(b){ return b.dataset.active === '1'; }).map(function(b){ return b.dataset.value; });
+    return arr.length ? arr : ['Chest','Back','Shoulders'];
+  }
+
+  function bmiAdvice(bmi, goal, aim){
+    if(bmi < 18.5){
+      if(goal === 'lose' || goal === 'leancut') return 'Your BMI is low. Cutting is not ideal right now; lean bulk is the better path for health, muscle and aesthetics.';
+      return 'Your BMI is low, so a lean bulk is a strong choice. Gain slowly and keep training progressive.';
+    }
+    if(bmi < 25){
+      if(goal === 'leanbulk') return 'Healthy BMI plus aesthetic goal: lean bulk fits well. Aim for slow weight gain and better lifts.';
+      if(goal === 'leancut') return 'Healthy BMI: lean cut can work if definition is the priority, but keep the deficit small.';
+      if(goal === 'bulk') return 'Bulk can work, but lean bulk is usually cleaner for an aesthetic figure.';
+      return aim === 'aesthetic' ? 'Healthy BMI: recomp or lean bulk is usually best for aesthetics.' : 'Healthy BMI: your selected goal is reasonable.';
+    }
+    if(bmi < 30){
+      if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is above the healthy range. For aesthetics, a lean cut first may be better than bulking.';
+      return 'A cut or lean cut fits this BMI well. Keep protein high and train hard to preserve muscle.';
+    }
+    if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is high for bulking. A controlled cut is usually the safer first phase.';
+    return 'A steady deficit is a good first phase. Prioritise consistency, protein and low-impact activity.';
+  }
+
+  function dietOptions(goal, diet){
+    var veg = diet === 'veg';
+    var egg = diet === 'eggetarian';
+    var protein1 = veg ? 'paneer/tofu/soya' : egg ? 'eggs + paneer' : 'eggs/chicken/paneer';
+    var protein2 = veg ? 'dal + curd' : egg ? 'egg curry + dal' : 'chicken/fish + dal';
+    var heavySnack = veg ? 'milk + banana + peanut butter' : egg ? 'egg sandwich + milk' : 'chicken/paneer sandwich + milk';
+    var lightSnack = 'dahi/curd + fruit or bhuna chana';
+    var snack = (goal === 'bulk' || goal === 'leanbulk') ? heavySnack : lightSnack;
+    return [
+      {title:'Breakfast', body:'Poha/upma/oats or 2 rotis + '+protein1, hint:'Keep it repeatable; add milk if calories are low.'},
+      {title:'Lunch', body:'Rice or roti + '+protein2+' + sabzi + salad', hint:'Use this as the biggest balanced meal.'},
+      {title:'Pre/Post workout', body:snack, hint:'For cuts, keep it light. For bulks, use this to add calories.'},
+      {title:'Dinner', body:'Roti/rice + vegetables + '+protein1+' or dal', hint:'Keep dinner lighter if sleep or digestion suffers.'}
+    ];
+  }
+
+  function trainingPlan(type, focus, days, goal){
+    var lib = type === 'mixed' ? EXERCISES.gym : (EXERCISES[type] || EXERCISES.gym);
+    var alt = type === 'mixed' ? EXERCISES.calisthenics : null;
+    var volume = goal === 'bulk' || goal === 'leanbulk' ? 'Aim around 10-16 hard sets per focus muscle per week.' : goal === 'lose' || goal === 'leancut' ? 'Keep 6-12 quality sets per muscle and avoid junk volume when recovery is low.' : 'Train each major muscle 2x/week if possible.';
+    return {
+      split: days <= 3 ? 'Full body '+days+' days/week' : days === 4 ? 'Upper/lower or push-pull 4 days/week' : 'Push-pull-legs style '+days+' days/week',
+      volume:volume,
+      groups:focus.map(function(m){
+        var list = (lib[m] || EXERCISES.gym[m] || []).slice(0,6);
+        if(alt && alt[m]) list = list.slice(0,3).concat(alt[m].slice(0,3));
+        return {muscle:m, exercises:list};
+      })
+    };
+  }
+
+  function card(title, body, color){
+    return '<div class="plan-meal-card" style="border-color:'+color+'44;background:linear-gradient(135deg,'+color+'10,rgba(255,255,255,.03));">' +
+      '<div class="plan-meal-time" style="color:'+color+';">'+title+'</div>' +
+      body +
+    '</div>';
+  }
+
+  window.generatePlan = function(){
+    setupDietCoachUi();
+    var age = parseInt((byId('pl-age') || {}).value, 10) || 22;
+    var weight = parseFloat((byId('pl-weight') || {}).value);
+    var height = parseFloat((byId('pl-height') || {}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goalKey = byId('pl-goal') ? byId('pl-goal').value : 'leanbulk';
+    var aim = byId('vf-aim-v22') ? byId('vf-aim-v22').value : 'aesthetic';
+    var training = byId('vf-training-v22') ? byId('vf-training-v22').value : 'gym';
+    var days = Math.max(1, Math.min(7, parseInt((byId('vf-train-days-v22') || {}).value, 10) || 4));
+    if(!weight || !height){ alert('Weight aur height dalo!'); return; }
+
+    var goal = GOALS[goalKey] || GOALS.leanbulk;
+    var bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var target = Math.max(1200, tdee + goal.offset);
+    var protein = Math.round(weight * goal.protein[1]);
+    var fat = Math.round(weight * ((goal.fat[0] + goal.fat[1]) / 2));
+    var carbs = Math.max(80, Math.round((target - protein*4 - fat*9) / 4));
+    window.planCalResult = target;
+
+    var bmiColor = bmi < 18.5 ? '#29b6f6' : bmi < 25 ? '#00e5a0' : bmi < 30 ? '#ffa726' : '#ff5252';
+    var bmiCat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy' : bmi < 30 ? 'Overweight' : 'High';
+    var advice = bmiAdvice(bmi, goalKey, aim);
+
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = bmi;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+bmiColor+'22;color:'+bmiColor+';border:1px solid '+bmiColor+'44;">'+bmiCat+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = advice;
+    if(byId('plan-cal')) byId('plan-cal').textContent = target;
+    if(byId('plan-protein')) byId('plan-protein').textContent = protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = fat+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = goal.label+' plan for '+(training === 'mixed' ? 'mixed training' : training);
+
+    var p = profile();
+    var meals = dietOptions(goalKey, p.diet || 'nonveg');
+    var focus = selectedFocus();
+    var trainingInfo = trainingPlan(training, focus, days, goalKey);
+    var html = '';
+
+    html += card('Best path', '<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+goal.label+' at '+target+' kcal/day</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">Maintenance estimate: '+tdee+' kcal. This goal means '+(goal.offset>0?'+':'')+goal.offset+' kcal from maintenance: '+goal.pace+'.</div>', '#00e5a0');
+
+    html += card('Macro target', '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;"><div style="text-align:center;"><b style="color:#00e5a0;">'+protein+'g</b><div style="font-size:10px;color:#777;">Protein</div></div><div style="text-align:center;"><b style="color:#29b6f6;">'+carbs+'g</b><div style="font-size:10px;color:#777;">Carbs</div></div><div style="text-align:center;"><b style="color:#ffa726;">'+fat+'g</b><div style="font-size:10px;color:#777;">Fats</div></div></div>', '#29b6f6');
+
+    meals.forEach(function(m){
+      html += card(m.title, '<div style="font-size:13px;color:#e0e0e0;font-weight:600;">'+m.body+'</div><div style="font-size:11px;color:#888;line-height:1.5;margin-top:4px;">'+m.hint+'</div>', '#a78bfa');
+    });
+
+    html += card('Training structure', '<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+trainingInfo.split+'</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">'+trainingInfo.volume+'</div>', '#ff9f1c');
+    trainingInfo.groups.forEach(function(g){
+      html += card(g.muscle+' exercises', '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+g.exercises.map(function(x){ return '<span style="font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;">'+x+'</span>'; }).join('')+'</div>', '#00b4d8');
+    });
+
+    if(byId('plan-meals-list')) byId('plan-meals-list').innerHTML = html;
+    if(byId('plan-tips')){
+      byId('plan-tips').innerHTML = [
+        'Track weekly bodyweight average, not one random morning.',
+        'If weight is not moving after 2 weeks, adjust by 100-150 kcal.',
+        'Keep protein stable first; adjust carbs/fats for calories.',
+        'For aesthetics, chest/back/shoulders usually create the biggest visual change.',
+        'Train close to failure, but keep 1-2 reps in reserve on most sets.'
+      ].map(function(t){ return '- '+t; }).join('<br>');
+    }
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  document.addEventListener('DOMContentLoaded', setupDietCoachUi);
+  setTimeout(setupDietCoachUi, 250);
+  setTimeout(setupDietCoachUi, 1000);
+})();
+/* VITALFLOW_DIET_COACH_V22_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_COACH_ACCESS_V23_START */
+(function(){
+  if(window.__vfDietCoachAccessV23) return;
+  window.__vfDietCoachAccessV23 = true;
+
+  function showDietCoach(){
+    if(typeof showScreen === 'function'){
+      showScreen('planner', null);
+      document.querySelectorAll('.nav-btn').forEach(function(b){ b.classList.remove('active'); });
+    } else {
+      document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+      var planner = document.getElementById('screen-planner');
+      if(planner) planner.classList.add('active');
+    }
+    if(typeof window.generatePlan === 'function' && typeof window.__vfDietCoachV22 !== 'undefined'){
+      setTimeout(function(){
+        if(typeof window.__vfDietCoachV22 !== 'undefined'){
+          var firstInput = document.getElementById('pl-age');
+          if(firstInput) firstInput.scrollIntoView({behavior:'smooth', block:'start'});
+        }
+      }, 80);
+    }
+  }
+  window.openDietCoach = showDietCoach;
+
+  function makeBtn(id){
+    var btn = document.createElement('button');
+    btn.id = id;
+    btn.type = 'button';
+    btn.textContent = 'ðŸ¥— Diet Coach';
+    btn.onclick = showDietCoach;
+    btn.style.cssText = 'width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:14px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 20px rgba(0,229,160,.28);margin:8px 0;';
+    return btn;
+  }
+
+  function addAccessButtons(){
+    if(!document.getElementById('vf-profile-diet-coach-btn-v23')){
+      var profile = document.getElementById('screen-profile');
+      if(profile){
+        var card = document.createElement('div');
+        card.className = 'card';
+        card.id = 'vf-profile-diet-coach-btn-v23';
+        card.innerHTML = '<div class="card-title" style="margin-bottom:6px;">ðŸ¥— Diet & Training Coach</div><div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:8px;">Create bulk, lean bulk, cut, lean cut or maintain plans with workout guidance.</div>';
+        card.appendChild(makeBtn('vf-profile-diet-coach-open-v23'));
+        var firstCard = profile.querySelector('.card');
+        if(firstCard) profile.insertBefore(card, firstCard);
+        else profile.appendChild(card);
+      }
+    }
+
+    if(!document.getElementById('vf-more-diet-coach-btn-v23')){
+      var more = document.getElementById('screen-more');
+      if(more){
+        var mcard = document.createElement('div');
+        mcard.className = 'card';
+        mcard.id = 'vf-more-diet-coach-btn-v23';
+        mcard.innerHTML = '<div class="card-title" style="margin-bottom:6px;">ðŸ¥— Diet Coach</div><div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:8px;">BMI-based diet and exercise guidance.</div>';
+        mcard.appendChild(makeBtn('vf-more-diet-coach-open-v23'));
+        var ref = more.querySelector('.card');
+        if(ref) more.insertBefore(mcard, ref);
+        else more.appendChild(mcard);
+      }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', addAccessButtons);
+  setTimeout(addAccessButtons, 250);
+  setTimeout(addAccessButtons, 1000);
+})();
+/* VITALFLOW_DIET_COACH_ACCESS_V23_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_DEBUG_V24_START */
+(function(){
+  if(window.__vfDietDebugV24) return;
+  window.__vfDietDebugV24 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function profile(){
+    try {
+      if(typeof getProfile === 'function') return getProfile();
+      return JSON.parse(localStorage.getItem('nf_profile') || '{}');
+    } catch(e){ return {}; }
+  }
+  function setText(id, text){
+    var el = byId(id);
+    if(el) el.textContent = text;
+  }
+  function fixMojibakeLabels(){
+    setText('vf-more-diet-coach-open-v23', '\uD83E\uDD57 Diet Coach');
+    setText('vf-profile-diet-coach-open-v23', '\uD83E\uDD57 Diet Coach');
+    var more = byId('vf-more-diet-coach-btn-v23');
+    if(more){
+      var title = more.querySelector('.card-title');
+      if(title) title.textContent = '\uD83E\uDD57 Diet Coach';
+    }
+    var profileCard = byId('vf-profile-diet-coach-btn-v23');
+    if(profileCard){
+      var ptitle = profileCard.querySelector('.card-title');
+      if(ptitle) ptitle.textContent = '\uD83E\uDD57 Diet & Training Coach';
+    }
+  }
+
+  var GOALS = {
+    bulk:{label:'Bulk', offset:500, protein:[1.6,2.0], fat:[0.8,1.0], pace:'fastest muscle gain, higher fat-gain risk'},
+    leanbulk:{label:'Lean Bulk', offset:250, protein:[1.8,2.1], fat:[0.8,1.0], pace:'slow aesthetic muscle gain with less fat'},
+    maintain:{label:'Maintain / Recomp', offset:0, protein:[1.6,2.0], fat:[0.7,1.0], pace:'best for beginners or healthy-BMI recomposition'},
+    leancut:{label:'Lean Cut', offset:-300, protein:[2.0,2.2], fat:[0.7,0.9], pace:'steady fat loss while keeping performance'},
+    lose:{label:'Cut', offset:-500, protein:[2.0,2.3], fat:[0.6,0.8], pace:'faster fat loss, harder recovery'}
+  };
+
+  var EXERCISES = {
+    gym:{
+      Chest:['Barbell bench press','Incline dumbbell press','Chest press machine','Pec deck fly','Cable fly','Weighted dips'],
+      Back:['Lat pulldown','Seated cable row','Chest-supported row','Bent-over row','One-arm dumbbell row','Assisted pull-up'],
+      Shoulders:['Overhead press','Dumbbell shoulder press','Lateral raise','Rear delt fly','Face pull','Machine shoulder press'],
+      Legs:['Squat or hack squat','Leg press','Romanian deadlift','Leg extension','Hamstring curl','Standing calf raise'],
+      Arms:['Barbell curl','Incline dumbbell curl','Hammer curl','Triceps pushdown','Overhead triceps extension','Close-grip bench press'],
+      Core:['Cable crunch','Hanging knee raise','Ab wheel rollout','Pallof press','Reverse crunch','Plank']
+    },
+    calisthenics:{
+      Chest:['Push-up','Decline push-up','Diamond push-up','Archer push-up','Dips','Pseudo planche push-up'],
+      Back:['Pull-up','Chin-up','Inverted row','Australian pull-up','Scapular pull-up','Towel row'],
+      Shoulders:['Pike push-up','Wall handstand hold','Wall walk','Handstand push-up progression','Planche lean','Hindu push-up'],
+      Legs:['Bodyweight squat','Bulgarian split squat','Walking lunge','Jump squat','Pistol squat progression','Glute bridge'],
+      Arms:['Chin-up','Diamond push-up','Bench dip','Bodyweight triceps extension','Close-grip push-up','Ring/towel curl'],
+      Core:['Hollow body hold','Plank','Side plank','Hanging knee raise','L-sit progression','Leg raise']
+    },
+    home:{
+      Chest:['Push-up','Deficit push-up','Floor dumbbell press','Dumbbell fly','Resistance-band press','Chair dips'],
+      Back:['One-arm backpack row','Resistance-band row','Prone Y raise','Reverse snow angel','Towel row','Dumbbell row'],
+      Shoulders:['Pike push-up','Dumbbell shoulder press','Lateral raise','Rear delt raise','Wall walk','Band face pull'],
+      Legs:['Goblet squat','Split squat','Walking lunge','Romanian deadlift','Glute bridge','Calf raise'],
+      Arms:['Dumbbell curl','Hammer curl','Band curl','Chair dip','Overhead extension','Close-grip push-up'],
+      Core:['Plank','Dead bug','Reverse crunch','Mountain climber','Leg raise','Side plank']
+    }
+  };
+
+  var WEEK = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+  function setupDietCoachUi(){
+    fixMojibakeLabels();
+    var goal = byId('pl-goal');
+    if(goal){
+      goal.innerHTML =
+        '<option value="leanbulk">Lean Bulk - aesthetic muscle</option>' +
+        '<option value="bulk">Bulk - faster size gain</option>' +
+        '<option value="maintain">Maintain / Recomp</option>' +
+        '<option value="leancut">Lean Cut - definition</option>' +
+        '<option value="lose">Cut - fat loss</option>';
+    }
+    if(byId('vf-diet-coach-fields-v22')) return;
+    if(!goal || !goal.parentNode) return;
+    var box = document.createElement('div');
+    box.id = 'vf-diet-coach-fields-v22';
+    box.style.cssText = 'border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px;';
+    box.innerHTML =
+      '<div style="font-size:10px;color:#555;margin-bottom:3px;">Main physique goal</div>' +
+      '<select class="sel" id="vf-aim-v22">' +
+        '<option value="aesthetic">Aesthetic lean muscle</option><option value="muscle">Build muscle</option><option value="fatloss">Fat loss</option><option value="strength">Strength</option><option value="fitness">General fitness</option>' +
+      '</select>' +
+      '<div class="grid2" style="margin-bottom:8px;">' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Training type</div><select class="sel" id="vf-training-v22" style="margin:0;"><option value="gym">Gym</option><option value="calisthenics">Calisthenics</option><option value="home">Home workout</option><option value="mixed">Mixed</option></select></div>' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Days/week</div><input class="inp" id="vf-train-days-v22" type="number" min="1" max="7" value="4" style="margin:0;"></div>' +
+      '</div><div style="font-size:10px;color:#555;margin-bottom:6px;">Focus muscles</div><div id="vf-focus-chips-v22" style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:8px;"></div>';
+    goal.parentNode.insertBefore(box, goal.nextSibling);
+    var chips = byId('vf-focus-chips-v22');
+    ['Chest','Back','Shoulders','Legs','Arms','Core'].forEach(function(m, i){
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.value = m;
+      btn.textContent = m;
+      btn.dataset.active = i < 3 ? '1' : '0';
+      btn.style.cssText = 'background:'+(i<3?'rgba(0,229,160,.16)':'rgba(255,255,255,.04)')+';border:1px solid '+(i<3?'rgba(0,229,160,.45)':'rgba(255,255,255,.1)')+';color:'+(i<3?'#00e5a0':'var(--text2)')+';border-radius:999px;padding:7px 11px;font-size:12px;font-weight:700;font-family:inherit;';
+      btn.onclick = function(){
+        var active = btn.dataset.active === '1';
+        btn.dataset.active = active ? '0' : '1';
+        btn.style.background = active ? 'rgba(255,255,255,.04)' : 'rgba(0,229,160,.16)';
+        btn.style.borderColor = active ? 'rgba(255,255,255,.1)' : 'rgba(0,229,160,.45)';
+        btn.style.color = active ? 'var(--text2)' : '#00e5a0';
+      };
+      chips.appendChild(btn);
+    });
+  }
+
+  function selectedFocus(){
+    var chips = byId('vf-focus-chips-v22');
+    if(!chips) return ['Chest','Back','Shoulders'];
+    var arr = Array.prototype.slice.call(chips.querySelectorAll('button')).filter(function(b){ return b.dataset.active === '1'; }).map(function(b){ return b.dataset.value; });
+    return arr.length ? arr : ['Chest','Back','Shoulders'];
+  }
+
+  function bmiAdvice(bmi, goal, aim){
+    if(bmi < 18.5){
+      if(goal === 'lose' || goal === 'leancut') return 'Your BMI is low. Cutting is not ideal right now; lean bulk is better for health, muscle and aesthetics.';
+      return 'Your BMI is low, so lean bulk is a strong choice. Gain slowly and keep training progressive.';
+    }
+    if(bmi < 25){
+      if(goal === 'leanbulk') return 'Healthy BMI plus aesthetic goal: lean bulk fits well. Aim for slow weight gain and better lifts.';
+      if(goal === 'leancut') return 'Healthy BMI: lean cut can work if definition is the priority, but keep the deficit small.';
+      if(goal === 'bulk') return 'Bulk can work, but lean bulk is usually cleaner for an aesthetic figure.';
+      return aim === 'aesthetic' ? 'Healthy BMI: recomp or lean bulk is usually best for aesthetics.' : 'Healthy BMI: your selected goal is reasonable.';
+    }
+    if(bmi < 30){
+      if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is above the healthy range. For aesthetics, a lean cut first may be better than bulking.';
+      return 'A cut or lean cut fits this BMI well. Keep protein high and train hard to preserve muscle.';
+    }
+    if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is high for bulking. A controlled cut is usually the safer first phase.';
+    return 'A steady deficit is a good first phase. Prioritise consistency, protein and low-impact activity.';
+  }
+
+  function dietBase(diet){
+    if(diet === 'veg') return {
+      proteins:['Paneer','Tofu','Soya chunks','Dal','Curd','Milk'],
+      mains:['Roti + dal','Rice + rajma','Khichdi + curd','Paneer rice bowl','Soya pulao','Dal + sabzi + roti'],
+      snacks:['Dahi + banana','Paneer sandwich','Sattu shake','Makhana + milk','Bhuna chana','Peanut butter toast']
+    };
+    if(diet === 'eggetarian') return {
+      proteins:['Eggs','Paneer','Dal','Curd','Milk','Soya chunks'],
+      mains:['Egg curry + rice','Dal roti + boiled eggs','Paneer rice bowl','Rajma rice + egg','Egg bhurji + roti','Khichdi + curd + egg'],
+      snacks:['Boiled eggs + fruit','Egg sandwich','Dahi + banana','Sattu shake','Milk + peanuts','Paneer toast']
+    };
+    return {
+      proteins:['Chicken','Eggs','Fish','Paneer','Dal','Curd'],
+      mains:['Chicken rice bowl','Egg curry + rice','Dal roti + chicken','Fish curry + rice','Paneer roti plate','Rajma rice + eggs'],
+      snacks:['Chicken sandwich','Boiled eggs + fruit','Protein shake','Dahi + banana','Milk + peanuts','Paneer toast']
+    };
+  }
+
+  function weekPlan(goalKey, diet){
+    var b = dietBase(diet);
+    var bulk = goalKey === 'bulk' || goalKey === 'leanbulk';
+    var cut = goalKey === 'lose' || goalKey === 'leancut';
+    return WEEK.map(function(day, i){
+      var breakfast = [
+        'Oats with milk + '+b.proteins[i % b.proteins.length],
+        'Poha/upma + '+b.proteins[(i+1) % b.proteins.length],
+        'Roti/paratha + curd + '+b.proteins[(i+2) % b.proteins.length]
+      ][i % 3];
+      var lunch = b.mains[i % b.mains.length];
+      var snack = b.snacks[(i + (bulk ? 1 : 3)) % b.snacks.length];
+      var dinner = b.mains[(i+3) % b.mains.length];
+      if(cut){
+        breakfast = breakfast.replace('paratha','roti');
+        snack = ['Dahi + fruit','Bhuna chana','Makhana','Boiled eggs + cucumber','Buttermilk + chana','Paneer/tofu cubes'][i % 6];
+        dinner = dinner + ' + salad';
+      }
+      if(bulk){
+        snack = snack + ' + extra milk/banana';
+        lunch = lunch + ' + curd';
+      }
+      return {day:day, breakfast:breakfast, lunch:lunch, snack:snack, dinner:dinner};
+    });
+  }
+
+  function trainingPlan(type, focus, days, goal){
+    var lib = type === 'mixed' ? EXERCISES.gym : (EXERCISES[type] || EXERCISES.gym);
+    var alt = type === 'mixed' ? EXERCISES.calisthenics : null;
+    var volume = goal === 'bulk' || goal === 'leanbulk' ? 'Aim around 10-16 hard sets per focus muscle per week.' : goal === 'lose' || goal === 'leancut' ? 'Keep 6-12 quality sets per muscle and avoid junk volume when recovery is low.' : 'Train each major muscle 2x/week if possible.';
+    return {
+      split: days <= 3 ? 'Full body '+days+' days/week' : days === 4 ? 'Upper/lower or push-pull 4 days/week' : 'Push-pull-legs style '+days+' days/week',
+      volume:volume,
+      groups:focus.map(function(m){
+        var list = (lib[m] || EXERCISES.gym[m] || []).slice(0,6);
+        if(alt && alt[m]) list = list.slice(0,3).concat(alt[m].slice(0,3));
+        return {muscle:m, exercises:list};
+      })
+    };
+  }
+
+  function card(title, body, color){
+    return '<div class="plan-meal-card" style="border-color:'+color+'44;background:linear-gradient(135deg,'+color+'10,rgba(255,255,255,.03));">' +
+      '<div class="plan-meal-time" style="color:'+color+';">'+title+'</div>' + body + '</div>';
+  }
+
+  function benefitTags(goalKey){
+    if(goalKey === 'bulk') return ['More training fuel','Faster size gain','Easier calorie target'];
+    if(goalKey === 'leanbulk') return ['Clean muscle gain','Better for aesthetics','Less fat gain risk'];
+    if(goalKey === 'leancut') return ['Better definition','Keeps performance stable','Less hunger than hard cut'];
+    if(goalKey === 'lose') return ['Faster fat loss','High protein protects muscle','Clear calorie structure'];
+    return ['Recomposition friendly','Stable energy','Easy to follow long term'];
+  }
+
+  window.generatePlan = function(){
+    setupDietCoachUi();
+    var age = parseInt((byId('pl-age') || {}).value, 10) || 22;
+    var weight = parseFloat((byId('pl-weight') || {}).value);
+    var height = parseFloat((byId('pl-height') || {}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goalKey = byId('pl-goal') ? byId('pl-goal').value : 'leanbulk';
+    var aim = byId('vf-aim-v22') ? byId('vf-aim-v22').value : 'aesthetic';
+    var training = byId('vf-training-v22') ? byId('vf-training-v22').value : 'gym';
+    var days = Math.max(1, Math.min(7, parseInt((byId('vf-train-days-v22') || {}).value, 10) || 4));
+    if(!weight || !height){ alert('Weight aur height dalo!'); return; }
+
+    var goal = GOALS[goalKey] || GOALS.leanbulk;
+    var bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var target = Math.max(1200, tdee + goal.offset);
+    var protein = Math.round(weight * goal.protein[1]);
+    var fat = Math.round(weight * ((goal.fat[0] + goal.fat[1]) / 2));
+    var carbs = Math.max(80, Math.round((target - protein*4 - fat*9) / 4));
+    window.planCalResult = target;
+    window.__vfPlanCalResultV24 = target;
+
+    var bmiColor = bmi < 18.5 ? '#29b6f6' : bmi < 25 ? '#00e5a0' : bmi < 30 ? '#ffa726' : '#ff5252';
+    var bmiCat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy' : bmi < 30 ? 'Overweight' : 'High';
+    var advice = bmiAdvice(bmi, goalKey, aim);
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = bmi;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+bmiColor+'22;color:'+bmiColor+';border:1px solid '+bmiColor+'44;">'+bmiCat+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = advice;
+    if(byId('plan-cal')) byId('plan-cal').textContent = target;
+    if(byId('plan-protein')) byId('plan-protein').textContent = protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = fat+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = goal.label+' weekly plan for '+(training === 'mixed' ? 'mixed training' : training);
+
+    var p = profile();
+    var diet = p.diet || 'nonveg';
+    var focus = selectedFocus();
+    var trainingInfo = trainingPlan(training, focus, days, goalKey);
+    var plan = weekPlan(goalKey, diet);
+    var html = '';
+    html += card('Best path', '<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+goal.label+' at '+target+' kcal/day</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">Maintenance estimate: '+tdee+' kcal. Goal adjustment: '+(goal.offset>0?'+':'')+goal.offset+' kcal. '+goal.pace+'.</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'+benefitTags(goalKey).map(function(x){return '<span style="font-size:10px;color:#00e5a0;background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.18);border-radius:999px;padding:4px 8px;">'+x+'</span>';}).join('')+'</div>', '#00e5a0');
+    html += card('Macro target', '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;"><div style="text-align:center;"><b style="color:#00e5a0;">'+protein+'g</b><div style="font-size:10px;color:#777;">Protein<br>muscle repair</div></div><div style="text-align:center;"><b style="color:#29b6f6;">'+carbs+'g</b><div style="font-size:10px;color:#777;">Carbs<br>training fuel</div></div><div style="text-align:center;"><b style="color:#ffa726;">'+fat+'g</b><div style="font-size:10px;color:#777;">Fats<br>hormones</div></div></div>', '#29b6f6');
+    html += card('7-day meal planner', plan.map(function(d){
+      return '<div style="border-top:1px solid rgba(255,255,255,.06);padding:8px 0;"><div style="font-size:12px;font-weight:800;color:#00e5a0;margin-bottom:5px;">'+d.day+'</div><div style="display:grid;gap:5px;font-size:11px;color:#ccc;line-height:1.45;"><div><b>Breakfast:</b> '+d.breakfast+'</div><div><b>Lunch:</b> '+d.lunch+'</div><div><b>Snack:</b> '+d.snack+'</div><div><b>Dinner:</b> '+d.dinner+'</div></div></div>';
+    }).join(''), '#a78bfa');
+    html += card('Training structure', '<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+trainingInfo.split+'</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">'+trainingInfo.volume+'</div>', '#ff9f1c');
+    trainingInfo.groups.forEach(function(g){
+      html += card(g.muscle+' exercises', '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+g.exercises.map(function(x){ return '<span style="font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;">'+x+'</span>'; }).join('')+'</div>', '#00b4d8');
+    });
+    if(byId('plan-meals-list')) byId('plan-meals-list').innerHTML = html;
+    if(byId('plan-tips')){
+      byId('plan-tips').innerHTML = [
+        'Use the weekly plan as a rotation, not a prison. Swap rice/roti/paneer/chicken/eggs/soya as needed.',
+        'If weight is not moving after 2 weeks, adjust by 100-150 kcal.',
+        'Keep protein stable first; adjust carbs/fats for calories.',
+        'For aesthetics, chest/back/shoulders usually create the biggest visual change.',
+        'Train close to failure, but keep 1-2 reps in reserve on most sets.'
+      ].map(function(t){ return '- '+t; }).join('<br>');
+    }
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  window.applyPlanGoal = function(){
+    var target = window.__vfPlanCalResultV24 || window.planCalResult || parseInt((byId('plan-cal') || {}).textContent, 10);
+    if(!target || target < 500){ alert('Generate a plan first.'); return; }
+    try { window.calGoal = target; } catch(e) {}
+    localStorage.setItem('nf_goal', String(target));
+    if(typeof updateUI === 'function') updateUI();
+    if(typeof showScreen === 'function') showScreen('home', document.querySelector('.nav-btn'));
+    alert('Daily calorie goal set to '+target+' kcal.');
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setupDietCoachUi(); fixMojibakeLabels(); });
+  setTimeout(function(){ setupDietCoachUi(); fixMojibakeLabels(); }, 250);
+  setTimeout(function(){ setupDietCoachUi(); fixMojibakeLabels(); }, 1000);
+})();
+/* VITALFLOW_DIET_DEBUG_V24_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_LABELS_V25_START */
+(function(){
+  if(window.__vfDietLabelsV25) return;
+  window.__vfDietLabelsV25 = true;
+
+  function labelFor(inputId, text){
+    var input = document.getElementById(inputId);
+    if(!input) return;
+    var parent = input.parentNode;
+    if(!parent) return;
+    if(parent.querySelector('[data-vf-label-v25="'+inputId+'"]')) return;
+
+    var label = document.createElement('div');
+    label.dataset.vfLabelV25 = inputId;
+    label.setAttribute('data-vf-label-v25', inputId);
+    label.textContent = text;
+    label.style.cssText = 'font-size:10px;color:#6f6f88;margin:0 0 4px;font-weight:700;';
+
+    if(parent === input.closest('.grid2')){
+      var wrap = document.createElement('div');
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(label);
+      wrap.appendChild(input);
+    } else {
+      parent.insertBefore(label, input);
+    }
+  }
+
+  function addLabels(){
+    labelFor('pl-age', 'Age');
+    labelFor('pl-weight', 'Weight (kg)');
+    labelFor('pl-height', 'Height (cm)');
+    labelFor('pl-gender', 'Gender');
+    labelFor('pl-activity', 'Activity level');
+    labelFor('pl-goal', 'Diet goal');
+  }
+
+  var oldOpenDietCoach = window.openDietCoach;
+  window.openDietCoach = function(){
+    if(typeof oldOpenDietCoach === 'function') oldOpenDietCoach();
+    setTimeout(addLabels, 80);
+  };
+
+  document.addEventListener('DOMContentLoaded', addLabels);
+  setTimeout(addLabels, 250);
+  setTimeout(addLabels, 1000);
+})();
+/* VITALFLOW_DIET_LABELS_V25_END */
+</script>
+</body>
 </html>
