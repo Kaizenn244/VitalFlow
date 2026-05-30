@@ -7785,5 +7785,2450 @@ window.__showInstall=function(){
 })();
 /* VITALFLOW_COPY_PASTE_BACKUP_V29_END */
 </script>
+
+<script>
+/* VITALFLOW_TRANSFER_WORKOUT_DIETEDIT_V30_START */
+(function(){
+  if(window.__vfTransferWorkoutDietEditV30) return;
+  window.__vfTransferWorkoutDietEditV30 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+  function backupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null)
+    };
+  }
+  function backupText(){ return JSON.stringify(backupPayload(), null, 2); }
+  function fileName(){ return 'VitalFlow-backup-' + todayKey() + '.json'; }
+
+  function saveState(s){
+    if(typeof sS === 'function') sS(s);
+    else localStorage.setItem('nf_s', JSON.stringify(s));
+  }
+  function saveCustomFoods(a){
+    if(typeof setCF === 'function') setCF(a);
+    else localStorage.setItem('nf_cf', JSON.stringify(a));
+  }
+  function saveHabitsSafe(a){
+    if(typeof saveHabits === 'function') saveHabits(a);
+    else localStorage.setItem('vf_habits', JSON.stringify(a));
+  }
+  function saveHabitLogsSafe(a){
+    if(typeof saveHabitLogs === 'function') saveHabitLogs(a);
+    else localStorage.setItem('vf_habit_logs', JSON.stringify(a));
+  }
+  function applyBackup(data){
+    if(!data || !data.version || String(data.version).indexOf('VitalFlow') < 0){
+      alert('Invalid VitalFlow backup data.');
+      return false;
+    }
+    if(!confirm('This will replace current data on this device. Continue?')) return false;
+    if(data.state) saveState(data.state);
+    if(data.customFoods) saveCustomFoods(data.customFoods);
+    if(data.favorites){ window.favs = data.favorites; localStorage.setItem('nf_favs', JSON.stringify(data.favorites)); }
+    if(data.habits) saveHabitsSafe(data.habits);
+    if(data.habitLogs) saveHabitLogsSafe(data.habitLogs);
+    if(data.profile) localStorage.setItem('nf_profile', JSON.stringify(data.profile));
+    if(data.goals){
+      if(data.goals.calGoal){ try{ window.calGoal = data.goals.calGoal; }catch(e){} localStorage.setItem('nf_goal', data.goals.calGoal); }
+      if(data.goals.macroGoals) localStorage.setItem('nf_mg', JSON.stringify(data.goals.macroGoals));
+      if(data.goals.customNutrient) localStorage.setItem('nf_cn', JSON.stringify(data.goals.customNutrient));
+      if(data.goals.wGoal){ try{ window.wGoal = data.goals.wGoal; }catch(e){} localStorage.setItem('nf_wgoal', data.goals.wGoal); }
+      if(data.goals.wMpg){ try{ window.wMpg = data.goals.wMpg; }catch(e){} localStorage.setItem('nf_wml', data.goals.wMpg); }
+    }
+    if(typeof data.points !== 'undefined') localStorage.setItem('nf_pts', data.points);
+    if(data.weights) localStorage.setItem('nf_weights', JSON.stringify(data.weights));
+    if(data.microGoals) localStorage.setItem('vf_micro_goals', JSON.stringify(data.microGoals));
+    alert('Data imported successfully. Reloading now.');
+    location.reload();
+    return true;
+  }
+
+  function copyText(text, note){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(text).then(function(){ if(note) note.textContent = 'Copied.'; }).catch(function(){ fallbackCopy(note); });
+    } else fallbackCopy(note);
+  }
+  function fallbackCopy(note){
+    var ta = byId('vf-transfer-text-v30') || byId('vf-import-text-v30');
+    if(ta){ ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); }
+    try { document.execCommand('copy'); if(note) note.textContent = 'Copied.'; }
+    catch(e){ if(note) note.textContent = 'Select all text manually and copy it.'; }
+  }
+
+  function splitChunks(text){
+    var size = 24000;
+    var id = Date.now().toString(36);
+    var total = Math.ceil(text.length / size);
+    var chunks = [];
+    for(var i=0;i<total;i++){
+      chunks.push('VFCHUNK|' + id + '|' + (i+1) + '|' + total + '\n' + text.slice(i*size, (i+1)*size));
+    }
+    return chunks;
+  }
+
+  function parseChunk(text){
+    var firstBreak = text.indexOf('\n');
+    if(firstBreak < 0) return null;
+    var head = text.slice(0, firstBreak).trim();
+    var body = text.slice(firstBreak + 1);
+    var parts = head.split('|');
+    if(parts[0] !== 'VFCHUNK' || parts.length !== 4) return null;
+    return {id:parts[1], index:parseInt(parts[2],10), total:parseInt(parts[3],10), body:body};
+  }
+
+  function openTransferPanel(){
+    var old = byId('vf-transfer-panel-v30');
+    if(old) old.remove();
+    var text = backupText();
+    var chunks = splitChunks(text);
+    var idx = 0;
+    var panel = document.createElement('div');
+    panel.id = 'vf-transfer-panel-v30';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Transfer Data</div><div id="vf-transfer-sub-v30" style="font-size:11px;color:#a0a0b8;"></div></div>' +
+        '<button id="vf-transfer-close-v30" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+        '<button id="vf-transfer-share-v30" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:800;">Share File</button>' +
+        '<button id="vf-transfer-download-v30" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:10px;font-size:12px;font-weight:800;">Download File</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-bottom:8px;">' +
+        '<button id="vf-transfer-prev-v30" style="background:#13131a;border:1px solid #333;color:#aaa;border-radius:10px;padding:9px;font-size:12px;font-weight:700;">Prev</button>' +
+        '<button id="vf-transfer-copy-v30" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:9px;font-size:12px;font-weight:800;">Copy Chunk</button>' +
+        '<button id="vf-transfer-next-v30" style="background:#13131a;border:1px solid #333;color:#aaa;border-radius:10px;padding:9px;font-size:12px;font-weight:700;">Next</button>' +
+      '</div>' +
+      '<textarea id="vf-transfer-text-v30" readonly style="width:100%;height:120px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;"></textarea>' +
+      '<div id="vf-transfer-note-v30" style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">Best: Share File. If that fails, copy every chunk and paste them one by one on the other device.</div>';
+    document.body.appendChild(panel);
+
+    function render(){
+      byId('vf-transfer-sub-v30').textContent = chunks.length === 1 ? 'Small enough for one copy.' : 'Chunk ' + (idx+1) + ' of ' + chunks.length;
+      byId('vf-transfer-text-v30').value = chunks[idx];
+    }
+    render();
+    byId('vf-transfer-close-v30').onclick = function(){ panel.remove(); };
+    byId('vf-transfer-prev-v30').onclick = function(){ idx = Math.max(0, idx-1); render(); };
+    byId('vf-transfer-next-v30').onclick = function(){ idx = Math.min(chunks.length-1, idx+1); render(); };
+    byId('vf-transfer-copy-v30').onclick = function(){ copyText(chunks[idx], byId('vf-transfer-note-v30')); };
+    byId('vf-transfer-download-v30').onclick = function(){ downloadFile(text); };
+    byId('vf-transfer-share-v30').onclick = function(){ shareFile(text); };
+  }
+
+  function downloadFile(text){
+    try{
+      var blob = new Blob([text], {type:'application/json;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = fileName(); a.rel = 'noopener';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 800);
+    } catch(e){ alert('Download failed. Try Share File or Copy Chunk.'); }
+  }
+
+  async function shareFile(text){
+    try{
+      var f = new File([text], fileName(), {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[f]})){
+        await navigator.share({files:[f], title:'VitalFlow Backup', text:'VitalFlow backup file'});
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({title:'VitalFlow Backup', text:text});
+        return;
+      }
+    } catch(e){ return; }
+    alert('Share is not available here. Use Download File or Copy Chunk.');
+  }
+
+  function openImportPanel(){
+    var old = byId('vf-import-panel-v30');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-import-panel-v30';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Import Transfer Data</div><div style="font-size:11px;color:#a0a0b8;">Paste full backup or one chunk at a time.</div></div>' +
+        '<button id="vf-import-close-v30" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<textarea id="vf-import-text-v30" style="width:100%;height:190px;background:#080810;border:1px solid rgba(255,255,255,.12);border-radius:10px;color:#a0a0b8;padding:8px;font-size:10px;font-family:monospace;" placeholder="Paste full JSON or VFCHUNK here"></textarea>' +
+      '<button id="vf-import-apply-v30" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:9px;">Paste / Import</button>' +
+      '<div id="vf-import-note-v30" style="font-size:10px;color:#5a5a7a;margin-top:6px;line-height:1.45;">If using chunks, paste each chunk and tap Paste / Import after each one.</div>';
+    document.body.appendChild(panel);
+    byId('vf-import-close-v30').onclick = function(){ panel.remove(); };
+    byId('vf-import-apply-v30').onclick = function(){ handleImportText(byId('vf-import-text-v30').value); };
+    byId('vf-import-text-v30').focus();
+  }
+
+  function handleImportText(text){
+    text = (text || '').trim();
+    var note = byId('vf-import-note-v30');
+    if(!text){ if(note) note.textContent = 'Paste something first.'; return; }
+    var chunk = parseChunk(text);
+    if(chunk){
+      var store = readJSON('vf_transfer_chunks_v30', {});
+      if(!store[chunk.id]) store[chunk.id] = {total:chunk.total, parts:{}};
+      store[chunk.id].parts[chunk.index] = chunk.body;
+      localStorage.setItem('vf_transfer_chunks_v30', JSON.stringify(store));
+      var got = Object.keys(store[chunk.id].parts).length;
+      if(got < chunk.total){
+        if(note) note.textContent = 'Chunk saved: ' + got + ' of ' + chunk.total + '. Paste the next chunk.';
+        byId('vf-import-text-v30').value = '';
+        return;
+      }
+      var all = '';
+      for(var i=1;i<=chunk.total;i++){
+        if(typeof store[chunk.id].parts[i] === 'undefined'){
+          if(note) note.textContent = 'Missing chunk ' + i + '.';
+          return;
+        }
+        all += store[chunk.id].parts[i];
+      }
+      delete store[chunk.id];
+      localStorage.setItem('vf_transfer_chunks_v30', JSON.stringify(store));
+      text = all;
+    }
+    try{ applyBackup(JSON.parse(text)); }
+    catch(e){ if(note) note.textContent = 'Could not read backup. Paste full JSON or valid VFCHUNK.'; }
+  }
+
+  window.vfTransferBackupV30 = openTransferPanel;
+  window.vfImportTransferV30 = openImportPanel;
+
+  function selectedMuscles(){
+    return Array.prototype.slice.call(document.querySelectorAll('.vf-muscle-check-v20:checked')).map(function(el){ return el.value; });
+  }
+  function workoutNameFromMuscles(muscles, type){
+    if(type === 'Rest Day') return 'Rest Day';
+    if(!muscles.length) return type + ' Day';
+    if(muscles.length === 1 && muscles[0] === 'Full Body') return 'Full Body Day';
+    return muscles.join(' & ') + ' Day';
+  }
+  window.saveWorkout = function(){
+    var typeEl = byId('wo-type');
+    var type = typeEl ? typeEl.value : 'Strength';
+    var muscles = selectedMuscles();
+    if(!muscles.length && byId('wo-muscle')) muscles = [byId('wo-muscle').value || 'Full Body'];
+    var nameEl = byId('wo-name');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if(!name) name = workoutNameFromMuscles(muscles, type);
+    var w = {
+      name:name,
+      type:type,
+      muscle:muscles.join(' + ') || 'Full Body',
+      duration:type === 'Rest Day' ? 0 : (parseInt((byId('wo-dur') || {}).value, 10) || 0),
+      cal:type === 'Rest Day' ? 0 : (parseInt((byId('wo-cal') || {}).value, 10) || 0),
+      notes:(byId('wo-notes') ? byId('wo-notes').value.trim() : '')
+    };
+    var s = typeof gT === 'function' ? gT() : readJSON('nf_s', {});
+    var tk = todayKey();
+    if(!s[tk]) s[tk] = {meals:[],waterMl:0,workouts:[]};
+    if(!s[tk].workouts) s[tk].workouts = [];
+    s[tk].workouts.push(w);
+    saveState(s);
+    if(typeof updateUI === 'function') updateUI();
+    if(typeof closeWorkoutModal === 'function') closeWorkoutModal();
+  };
+
+  function enhanceExerciseCards(){
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card'));
+    cards.forEach(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      if(!title || title.textContent.indexOf('exercises') < 0 || card.dataset.v30ExerciseEdit === 'done') return;
+      card.dataset.v30ExerciseEdit = 'done';
+      Array.prototype.forEach.call(card.querySelectorAll('span'), function(span){
+        if(span.dataset.v30Chip === 'done') return;
+        span.dataset.v30Chip = 'done';
+        span.style.cursor = 'pointer';
+        span.title = 'Tap to remove';
+        span.onclick = function(){ span.remove(); };
+      });
+      var tools = document.createElement('div');
+      tools.style.cssText = 'border-top:1px solid rgba(255,255,255,.07);margin-top:9px;padding-top:8px;';
+      tools.innerHTML =
+        '<div style="display:flex;gap:6px;margin-bottom:7px;"><input class="inp vf-ex-add-v30" placeholder="Add exercise" style="margin:0;flex:1;padding:8px 10px;font-size:12px;"><button type="button" class="vf-ex-add-btn-v30" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:700;">Add</button></div>' +
+        '<textarea class="inp vf-ex-note-v30" placeholder="Exercise notes/instructions for this muscle..." style="height:62px;resize:none;margin:0;font-size:12px;"></textarea>' +
+        '<div style="font-size:10px;color:#666;margin-top:5px;">Tap any exercise chip to remove it.</div>';
+      card.appendChild(tools);
+      tools.querySelector('.vf-ex-add-btn-v30').onclick = function(){
+        var inp = tools.querySelector('.vf-ex-add-v30');
+        var val = inp.value.trim();
+        if(!val) return;
+        var wrap = card.querySelector('div[style*="flex-wrap"]') || title.parentNode;
+        var chip = document.createElement('span');
+        chip.textContent = val;
+        chip.dataset.v30Chip = 'done';
+        chip.title = 'Tap to remove';
+        chip.style.cssText = 'font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;cursor:pointer;';
+        chip.onclick = function(){ chip.remove(); };
+        wrap.appendChild(chip);
+        inp.value = '';
+      };
+    });
+  }
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(enhanceExerciseCards, 80);
+  };
+
+  function addButtons(){
+    var more = byId('screen-more');
+    if(!more) return;
+    var cards = Array.prototype.slice.call(more.querySelectorAll('.card'));
+    var dataCard = cards.find(function(c){ return (c.textContent || '').indexOf('Data Backup') >= 0; });
+    if(!dataCard || byId('vf-transfer-row-v30')) return;
+    var row = document.createElement('div');
+    row.id = 'vf-transfer-row-v30';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;';
+    row.innerHTML =
+      '<button type="button" onclick="vfTransferBackupV30()" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">Transfer Data</button>' +
+      '<button type="button" onclick="vfImportTransferV30()" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:10px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;">Import Transfer</button>';
+    var ref = byId('vf-copy-paste-row-v29') || byId('vf-share-backup-inline-v27');
+    if(ref && ref.parentNode) ref.parentNode.insertBefore(row, ref.nextSibling);
+    else dataCard.appendChild(row);
+  }
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(addButtons, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ addButtons(); setTimeout(enhanceExerciseCards, 500); });
+  setTimeout(addButtons, 250);
+  setTimeout(addButtons, 1000);
+})();
+/* VITALFLOW_TRANSFER_WORKOUT_DIETEDIT_V30_END */
+</script>
+
+<script>
+/* VITALFLOW_FILE_TRANSFER_EXERCISE_NOTES_V31_START */
+(function(){
+  if(window.__vfFileTransferExerciseNotesV31) return;
+  window.__vfFileTransferExerciseNotesV31 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function todayKey(){
+    if(typeof TODAY_KEY !== 'undefined') return TODAY_KEY;
+    return new Date().toISOString().slice(0,10);
+  }
+
+  function backupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null)
+    };
+  }
+
+  function backupText(){ return JSON.stringify(backupPayload(), null, 2); }
+  function saveAs(text, name, type){
+    try{
+      var blob = new Blob([text], {type:type || 'text/plain;charset=utf-8'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 1000);
+    } catch(e){
+      alert('Download failed on this browser. Try Share File.');
+    }
+  }
+  function jsonName(){ return 'VitalFlow-backup-' + todayKey() + '.json'; }
+  function txtName(){ return 'VitalFlow-backup-' + todayKey() + '.txt'; }
+
+  async function shareBackupFile(){
+    var text = backupText();
+    try{
+      var file = new File([text], jsonName(), {type:'application/json'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'VitalFlow Backup', text:'VitalFlow backup file'});
+        return;
+      }
+      if(navigator.share){
+        await navigator.share({title:'VitalFlow Backup', text:text});
+        return;
+      }
+    } catch(e){}
+    alert('Share is not available here. Try Download JSON or Download TXT.');
+  }
+
+  window.exportData = function(){
+    var old = byId('vf-file-export-panel-v31');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-file-export-panel-v31';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;">' +
+        '<div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Export VitalFlow Data</div><div style="font-size:11px;color:#a0a0b8;">Use JSON first. TXT is a backup option if Android blocks JSON.</div></div>' +
+        '<button id="vf-file-export-close-v31" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">' +
+        '<button id="vf-download-json-v31" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:11px;font-size:12px;font-weight:800;">Download JSON</button>' +
+        '<button id="vf-download-txt-v31" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:10px;padding:11px;font-size:12px;font-weight:800;">Download TXT</button>' +
+      '</div>' +
+      '<button id="vf-share-file-v31" style="width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:11px;font-size:12px;font-weight:800;">Share File</button>' +
+      '<div style="font-size:10px;color:#5a5a7a;margin-top:8px;line-height:1.45;">Import accepts both .json and .txt backup files.</div>';
+    document.body.appendChild(panel);
+    byId('vf-file-export-close-v31').onclick = function(){ panel.remove(); };
+    byId('vf-download-json-v31').onclick = function(){ saveAs(backupText(), jsonName(), 'application/json;charset=utf-8'); };
+    byId('vf-download-txt-v31').onclick = function(){ saveAs(backupText(), txtName(), 'text/plain;charset=utf-8'); };
+    byId('vf-share-file-v31').onclick = shareBackupFile;
+  };
+
+  function saveState(s){ if(typeof sS === 'function') sS(s); else localStorage.setItem('nf_s', JSON.stringify(s)); }
+  function saveCustomFoods(a){ if(typeof setCF === 'function') setCF(a); else localStorage.setItem('nf_cf', JSON.stringify(a)); }
+  function saveHabitsSafe(a){ if(typeof saveHabits === 'function') saveHabits(a); else localStorage.setItem('vf_habits', JSON.stringify(a)); }
+  function saveHabitLogsSafe(a){ if(typeof saveHabitLogs === 'function') saveHabitLogs(a); else localStorage.setItem('vf_habit_logs', JSON.stringify(a)); }
+
+  function applyBackup(data){
+    if(!data || !data.version || String(data.version).indexOf('VitalFlow') < 0){
+      alert('Invalid VitalFlow backup file.');
+      return false;
+    }
+    if(!confirm('This will replace current data on this device. Continue?')) return false;
+    if(data.state) saveState(data.state);
+    if(data.customFoods) saveCustomFoods(data.customFoods);
+    if(data.favorites){ window.favs = data.favorites; localStorage.setItem('nf_favs', JSON.stringify(data.favorites)); }
+    if(data.habits) saveHabitsSafe(data.habits);
+    if(data.habitLogs) saveHabitLogsSafe(data.habitLogs);
+    if(data.profile) localStorage.setItem('nf_profile', JSON.stringify(data.profile));
+    if(data.goals){
+      if(data.goals.calGoal){ try{ window.calGoal = data.goals.calGoal; }catch(e){} localStorage.setItem('nf_goal', data.goals.calGoal); }
+      if(data.goals.macroGoals) localStorage.setItem('nf_mg', JSON.stringify(data.goals.macroGoals));
+      if(data.goals.customNutrient) localStorage.setItem('nf_cn', JSON.stringify(data.goals.customNutrient));
+      if(data.goals.wGoal){ try{ window.wGoal = data.goals.wGoal; }catch(e){} localStorage.setItem('nf_wgoal', data.goals.wGoal); }
+      if(data.goals.wMpg){ try{ window.wMpg = data.goals.wMpg; }catch(e){} localStorage.setItem('nf_wml', data.goals.wMpg); }
+    }
+    if(typeof data.points !== 'undefined') localStorage.setItem('nf_pts', data.points);
+    if(data.weights) localStorage.setItem('nf_weights', JSON.stringify(data.weights));
+    if(data.microGoals) localStorage.setItem('vf_micro_goals', JSON.stringify(data.microGoals));
+    alert('Data imported successfully. Reloading now.');
+    location.reload();
+    return true;
+  }
+
+  window.importData = function(e){
+    var file = e && e.target && e.target.files && e.target.files[0];
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      try{
+        var text = String(ev.target.result || '').trim();
+        var data = JSON.parse(text);
+        applyBackup(data);
+      } catch(err){
+        alert('Could not read this backup file. Make sure it is the VitalFlow .json or .txt export file.');
+      }
+    };
+    reader.onerror = function(){ alert('Could not read this file on this device. Try choosing the TXT backup file.'); };
+    reader.readAsText(file);
+    if(e.target) e.target.value = '';
+  };
+
+  function hideCopyPasteTransferUi(){
+    ['vf-copy-paste-row-v29','vf-transfer-row-v30','vf-share-backup-inline-v27','vf-paste-import-btn-v28'].forEach(function(id){
+      var el = byId(id);
+      if(el) el.style.display = 'none';
+    });
+    var file = byId('import-file');
+    if(file) file.setAttribute('accept', '.json,.txt,application/json,text/plain');
+  }
+
+  function exerciseRows(){
+    var cards = Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card'));
+    cards.forEach(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      if(!title || title.textContent.indexOf('exercises') < 0 || card.dataset.v31Rows === 'done') return;
+      card.dataset.v31Rows = 'done';
+      var oldTool = card.querySelector('.vf-ex-note-v30');
+      if(oldTool && oldTool.closest('div')) oldTool.closest('div').style.display = 'none';
+
+      var chips = Array.prototype.slice.call(card.querySelectorAll('span')).filter(function(s){
+        return s.textContent && !s.closest('.vf-ex-row-v31');
+      });
+      if(!chips.length) return;
+
+      var list = document.createElement('div');
+      list.className = 'vf-ex-list-v31';
+      list.style.cssText = 'display:grid;gap:7px;margin-top:7px;';
+      chips.forEach(function(chip){
+        var name = chip.textContent.trim();
+        chip.style.display = 'none';
+        addExerciseRow(list, name);
+      });
+      var flexWrap = card.querySelector('div[style*="flex-wrap"]');
+      if(flexWrap) flexWrap.parentNode.insertBefore(list, flexWrap.nextSibling);
+      else card.appendChild(list);
+
+      var controls = document.createElement('div');
+      controls.style.cssText = 'border-top:1px solid rgba(255,255,255,.07);margin-top:9px;padding-top:8px;';
+      controls.innerHTML =
+        '<div style="display:flex;gap:6px;"><input class="inp vf-ex-new-v31" placeholder="Add exercise name" style="margin:0;flex:1;padding:8px 10px;font-size:12px;"><button type="button" class="vf-ex-new-btn-v31" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:8px 11px;font-size:12px;font-weight:700;">Add</button></div>';
+      card.appendChild(controls);
+      controls.querySelector('.vf-ex-new-btn-v31').onclick = function(){
+        var inp = controls.querySelector('.vf-ex-new-v31');
+        var val = inp.value.trim();
+        if(!val) return;
+        addExerciseRow(list, val);
+        inp.value = '';
+      };
+    });
+  }
+
+  function addExerciseRow(list, name){
+    var row = document.createElement('div');
+    row.className = 'vf-ex-row-v31';
+    row.style.cssText = 'background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px;';
+    row.innerHTML =
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px;"><div style="font-size:12px;color:#e0e0e0;font-weight:800;">'+escapeHtml(name)+'</div><button type="button" class="vf-ex-remove-v31" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.35);color:#ff4d6d;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">Remove</button></div>' +
+      '<textarea class="inp" placeholder="Notes: sets, reps, form cue, machine setting..." style="height:54px;resize:none;margin:0;font-size:11px;padding:8px 10px;"></textarea>';
+    list.appendChild(row);
+    row.querySelector('.vf-ex-remove-v31').onclick = function(){ row.remove(); };
+  }
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(exerciseRows, 120);
+  };
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(hideCopyPasteTransferUi, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ hideCopyPasteTransferUi(); setTimeout(exerciseRows, 800); });
+  setTimeout(hideCopyPasteTransferUi, 250);
+  setTimeout(hideCopyPasteTransferUi, 1000);
+})();
+/* VITALFLOW_FILE_TRANSFER_EXERCISE_NOTES_V31_END */
+</script>
+
+<script>
+/* VITALFLOW_COMPACT_EXERCISE_EDITOR_V32_START */
+(function(){
+  if(window.__vfCompactExerciseEditorV32) return;
+  window.__vfCompactExerciseEditorV32 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function categories(){
+    return ['Chest','Back','Shoulders','Legs','Arms','Core'];
+  }
+
+  function findExerciseCards(){
+    return Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card')).filter(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      return title && title.textContent.indexOf('exercises') >= 0;
+    });
+  }
+
+  function categoryFromCard(card){
+    var title = card.querySelector('.plan-meal-time');
+    if(!title) return 'General';
+    return title.textContent.replace(' exercises','').trim();
+  }
+
+  function rowHtml(name, note){
+    return '<div class="vf-ex-row-v32" data-name="'+escapeHtml(name)+'" data-note="'+escapeHtml(note || '')+'" style="display:flex;align-items:center;gap:8px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 9px;">' +
+      '<div class="vf-ex-name-v32" style="font-size:12px;color:#e0e0e0;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escapeHtml(name)+'</div>' +
+      '<button type="button" class="vf-ex-view-v32" style="background:rgba(0,180,216,.1);border:1px solid rgba(0,180,216,.35);color:#29b6f6;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">View</button>' +
+      '<button type="button" class="vf-ex-edit-v32" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.35);color:#00e5a0;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">Edit</button>' +
+    '</div>';
+  }
+
+  function compactExerciseCards(){
+    var cards = findExerciseCards();
+    if(!cards.length) return;
+
+    cards.forEach(function(card){
+      if(card.dataset.v32Compact === 'done') return;
+      card.dataset.v32Compact = 'done';
+      var cat = categoryFromCard(card);
+      card.dataset.categoryV32 = cat;
+
+      var names = [];
+      var oldRows = Array.prototype.slice.call(card.querySelectorAll('.vf-ex-row-v31'));
+      if(oldRows.length){
+        oldRows.forEach(function(r){
+          var title = r.querySelector('div[style*="font-weight:800"]');
+          var note = r.querySelector('textarea');
+          if(title) names.push({name:title.textContent.trim(), note:note ? note.value.trim() : ''});
+        });
+      } else {
+        Array.prototype.slice.call(card.querySelectorAll('span')).forEach(function(span){
+          var t = span.textContent.trim();
+          if(t) names.push({name:t, note:''});
+        });
+      }
+      if(!names.length) return;
+
+      Array.prototype.slice.call(card.children).forEach(function(child){
+        if(!child.classList || !child.classList.contains('plan-meal-time')) child.style.display = 'none';
+      });
+
+      var list = document.createElement('div');
+      list.className = 'vf-ex-list-v32';
+      list.style.cssText = 'display:grid;gap:7px;margin-top:8px;';
+      list.innerHTML = names.map(function(x){ return rowHtml(x.name, x.note); }).join('');
+      card.appendChild(list);
+    });
+
+    addGlobalAddButton(cards[0].parentNode || cards[0]);
+  }
+
+  function addGlobalAddButton(container){
+    if(byId('vf-global-add-exercise-v32')) return;
+    var btn = document.createElement('button');
+    btn.id = 'vf-global-add-exercise-v32';
+    btn.type = 'button';
+    btn.textContent = '+ Add Exercise';
+    btn.style.cssText = 'width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;margin:8px 0;';
+    btn.onclick = function(){ openExerciseEditModal(null); };
+    var firstCard = findExerciseCards()[0];
+    if(firstCard && firstCard.parentNode) firstCard.parentNode.insertBefore(btn, firstCard);
+    else container.appendChild(btn);
+  }
+
+  function openExerciseViewModal(row){
+    var old = byId('vf-ex-modal-v32');
+    if(old) old.remove();
+    var name = row.dataset.name || '';
+    var note = row.dataset.note || '';
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v32';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML =
+      '<div style="width:100%;max-height:70vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+escapeHtml(name)+'</div><button id="vf-ex-close-v32" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+        '<div style="font-size:11px;color:#888;margin-bottom:5px;">Notes / instructions</div>' +
+        '<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;font-size:13px;color:#d0d0dc;line-height:1.6;white-space:pre-wrap;">'+escapeHtml(note || 'No notes added yet.')+'</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    byId('vf-ex-close-v32').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+  }
+
+  function openExerciseEditModal(row){
+    var old = byId('vf-ex-modal-v32');
+    if(old) old.remove();
+    var isNew = !row;
+    var currentName = row ? row.dataset.name || '' : '';
+    var currentNote = row ? row.dataset.note || '' : '';
+    var currentCat = row ? categoryFromCard(row.closest('.plan-meal-card')) : categories()[0];
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v32';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML =
+      '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+(isNew?'Add Exercise':'Edit Exercise')+'</div><button id="vf-ex-close-v32" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+        '<div style="font-size:10px;color:#666;margin-bottom:4px;">Category</div>' +
+        '<select id="vf-ex-cat-v32" class="sel">'+categories().map(function(c){ return '<option value="'+c+'" '+(c===currentCat?'selected':'')+'>'+c+'</option>'; }).join('')+'</select>' +
+        '<div style="font-size:10px;color:#666;margin-bottom:4px;">Exercise name</div>' +
+        '<input id="vf-ex-name-input-v32" class="inp" value="'+escapeHtml(currentName)+'" placeholder="Exercise name">' +
+        '<div style="font-size:10px;color:#666;margin-bottom:4px;">Notes / instructions</div>' +
+        '<textarea id="vf-ex-note-input-v32" class="inp" style="height:110px;resize:none;" placeholder="Sets, reps, form cues, machine setting...">'+escapeHtml(currentNote)+'</textarea>' +
+        '<button id="vf-ex-save-v32" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save</button>' +
+        (!isNew ? '<button id="vf-ex-delete-v32" style="width:100%;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;margin-top:8px;">Delete Exercise</button>' : '') +
+      '</div>';
+    document.body.appendChild(modal);
+    byId('vf-ex-close-v32').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+    byId('vf-ex-save-v32').onclick = function(){
+      var name = byId('vf-ex-name-input-v32').value.trim();
+      var note = byId('vf-ex-note-input-v32').value.trim();
+      var cat = byId('vf-ex-cat-v32').value;
+      if(!name){ alert('Exercise name dalo.'); return; }
+      var card = findExerciseCards().find(function(c){ return categoryFromCard(c) === cat; });
+      if(!card){ alert('Category not found in this plan.'); return; }
+      var list = card.querySelector('.vf-ex-list-v32');
+      if(!list){
+        list = document.createElement('div');
+        list.className = 'vf-ex-list-v32';
+        list.style.cssText = 'display:grid;gap:7px;margin-top:8px;';
+        card.appendChild(list);
+      }
+      if(row){
+        row.dataset.name = name;
+        row.dataset.note = note;
+        var n = row.querySelector('.vf-ex-name-v32');
+        if(n) n.textContent = name;
+        if(row.parentNode !== list) list.appendChild(row);
+      } else {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = rowHtml(name, note);
+        list.appendChild(tmp.firstChild);
+      }
+      modal.remove();
+    };
+    var del = byId('vf-ex-delete-v32');
+    if(del){
+      del.onclick = function(){
+        if(confirm('Delete this exercise?')){ row.remove(); modal.remove(); }
+      };
+    }
+  }
+
+  document.addEventListener('click', function(e){
+    var view = e.target.closest('.vf-ex-view-v32');
+    if(view){ openExerciseViewModal(view.closest('.vf-ex-row-v32')); return; }
+    var edit = e.target.closest('.vf-ex-edit-v32');
+    if(edit){ openExerciseEditModal(edit.closest('.vf-ex-row-v32')); return; }
+  });
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(compactExerciseCards, 180);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(compactExerciseCards, 1000); });
+})();
+/* VITALFLOW_COMPACT_EXERCISE_EDITOR_V32_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_PLANNER_V33_START */
+(function(){
+  if(window.__vfDietPlannerV33) return;
+  window.__vfDietPlannerV33 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function profile(){
+    try {
+      if(typeof getProfile === 'function') return getProfile();
+      return JSON.parse(localStorage.getItem('nf_profile') || '{}');
+    } catch(e){ return {}; }
+  }
+
+  var GOALS = {
+    bulk:{label:'Bulk', offset:500, protein:[1.6,2.0], fat:[0.8,1.0], focus:'faster size gain'},
+    leanbulk:{label:'Lean Bulk', offset:250, protein:[1.8,2.1], fat:[0.8,1.0], focus:'aesthetic muscle gain'},
+    maintain:{label:'Maintain / Recomp', offset:0, protein:[1.6,2.0], fat:[0.7,1.0], focus:'stable energy and recomposition'},
+    leancut:{label:'Lean Cut', offset:-300, protein:[2.0,2.2], fat:[0.7,0.9], focus:'definition while keeping strength'},
+    lose:{label:'Cut', offset:-500, protein:[2.0,2.3], fat:[0.6,0.8], focus:'faster fat loss'}
+  };
+
+  var WEEK = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var BENEFITS = [
+    'Training fuel and stable energy',
+    'High protein recovery support',
+    'Fiber and digestion support',
+    'Balanced carbs for performance',
+    'Simple meals for consistency',
+    'Micronutrient variety',
+    'Flexible day to avoid diet fatigue'
+  ];
+
+  var FOODS = {
+    vegan:{
+      proteins:['tofu','soya chunks','dal','chana','rajma','peanut butter'],
+      breakfasts:['Oats with soy milk + banana','Poha + peanuts + sprouts','Besan chilla + chutney','Dalia with plant milk','Sattu drink + toast','Upma + sprouts','Peanut butter toast + fruit'],
+      lunches:['Rajma rice + salad','Chana rice bowl','Dal + roti + sabzi','Soya pulao + salad','Khichdi + pickle + salad','Tofu rice bowl','Chole + roti + salad'],
+      snacks:['Sattu shake','Bhuna chana','Peanut butter toast','Makhana','Fruit + peanuts','Sprouts chaat','Dates + soy milk'],
+      dinners:['Tofu sabzi + roti','Dal + rice + salad','Soya curry + roti','Chana soup + roti','Rajma + roti','Vegetable khichdi','Tofu stir fry + rice']
+    },
+    veg:{
+      proteins:['paneer','curd','milk','dal','soya chunks','chana'],
+      breakfasts:['Oats with milk + banana','Poha + curd','Paneer paratha + curd','Besan chilla + paneer','Dalia with milk','Upma + curd','Moong dal chilla'],
+      lunches:['Paneer rice bowl','Rajma rice + curd','Dal + roti + sabzi','Soya pulao + curd','Khichdi + curd','Chole + rice','Palak paneer + roti'],
+      snacks:['Dahi + banana','Paneer sandwich','Sattu shake','Makhana + milk','Bhuna chana','Peanut butter toast','Lassi + fruit'],
+      dinners:['Paneer bhurji + roti','Dal + rice + salad','Soya curry + roti','Palak paneer + roti','Rajma + roti','Vegetable khichdi + curd','Dal tadka + roti']
+    },
+    eggetarian:{
+      proteins:['eggs','paneer','curd','dal','milk','soya chunks'],
+      breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Egg paratha + curd','Dalia + boiled eggs','Besan chilla + eggs','Moong dal chilla + omelette'],
+      lunches:['Egg curry + rice','Dal roti + boiled eggs','Paneer rice bowl','Rajma rice + egg','Chole + roti + egg','Soya pulao + curd','Khichdi + boiled eggs'],
+      snacks:['Boiled eggs + fruit','Egg sandwich','Dahi + banana','Sattu shake','Milk + peanuts','Paneer toast','Makhana + tea'],
+      dinners:['Egg bhurji + roti','Dal + rice + omelette','Paneer bhurji + roti','Egg curry + roti','Khichdi + curd + egg','Soya curry + roti','Dal tadka + boiled eggs']
+    },
+    nonveg:{
+      proteins:['chicken','eggs','fish','paneer','dal','curd'],
+      breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Chicken sandwich + milk','Dalia + eggs','Besan chilla + eggs','Moong dal chilla + curd'],
+      lunches:['Chicken rice bowl','Egg curry + rice','Dal roti + chicken','Fish curry + rice','Paneer roti plate','Rajma rice + eggs','Chicken curry + roti'],
+      snacks:['Chicken sandwich','Boiled eggs + fruit','Protein shake','Dahi + banana','Milk + peanuts','Paneer toast','Sattu shake'],
+      dinners:['Chicken curry + roti','Fish + rice + salad','Egg bhurji + roti','Dal + chicken + rice','Paneer bhurji + roti','Khichdi + eggs','Chicken soup + roti']
+    }
+  };
+
+  function setupDietUi(){
+    hideProfileWeekPlan();
+    var goal = byId('pl-goal');
+    if(goal){
+      goal.innerHTML =
+        '<option value="leanbulk">Lean Bulk - aesthetic muscle</option>' +
+        '<option value="bulk">Bulk - faster size gain</option>' +
+        '<option value="maintain">Maintain / Recomp</option>' +
+        '<option value="leancut">Lean Cut - definition</option>' +
+        '<option value="lose">Cut - fat loss</option>';
+    }
+
+    if(byId('vf-diet-v33-fields')) return;
+    if(!goal || !goal.parentNode) return;
+    var saved = profile();
+    var box = document.createElement('div');
+    box.id = 'vf-diet-v33-fields';
+    box.style.cssText = 'border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px;';
+    box.innerHTML =
+      '<div class="grid2" style="margin-bottom:8px;">' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Diet preference</div><select class="sel" id="vf-diet-pref-v33" style="margin:0;"><option value="nonveg">Non-vegetarian</option><option value="eggetarian">Eggetarian</option><option value="veg">Vegetarian</option><option value="vegan">Vegan</option></select></div>' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Meal style</div><select class="sel" id="vf-meal-style-v33" style="margin:0;"><option value="home">Indian home food</option><option value="budget">Budget plan</option><option value="hostel">Hostel/simple food</option><option value="highprotein">High-protein plan</option><option value="nocook">No-cooking plan</option></select></div>' +
+      '</div>';
+    goal.parentNode.insertBefore(box, goal.nextSibling);
+    var pref = byId('vf-diet-pref-v33');
+    if(pref && saved.diet){
+      pref.value = saved.diet === 'nonveg' ? 'nonveg' : saved.diet === 'eggetarian' ? 'eggetarian' : saved.diet === 'veg' ? 'veg' : 'nonveg';
+    }
+  }
+
+  function hideProfileWeekPlan(){
+    var el = byId('week-plan-section');
+    if(el) el.style.display = 'none';
+  }
+
+  function bmiAdvice(bmi, goal){
+    if(bmi < 18.5){
+      if(goal === 'lose' || goal === 'leancut') return 'Your BMI is low. Cutting is not ideal right now; lean bulk is better for muscle and health.';
+      return 'Your BMI is low, so lean bulk is a strong choice. Gain slowly and keep training progressive.';
+    }
+    if(bmi < 25){
+      if(goal === 'leanbulk') return 'Healthy BMI plus aesthetic goal: lean bulk fits well. Aim for slow weight gain and better lifts.';
+      if(goal === 'leancut') return 'Healthy BMI: lean cut works if definition is priority, but keep the deficit small.';
+      if(goal === 'bulk') return 'Bulk can work, but lean bulk is usually cleaner for an aesthetic look.';
+      return 'Healthy BMI: maintain/recomp or lean bulk are both reasonable.';
+    }
+    if(bmi < 30){
+      if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is above healthy range. For aesthetics, a lean cut first may be better than bulking.';
+      return 'A cut or lean cut fits this BMI well. Keep protein high and train hard.';
+    }
+    if(goal === 'bulk' || goal === 'leanbulk') return 'BMI is high for bulking. A controlled cut is usually the safer first phase.';
+    return 'A steady deficit is a good first phase. Prioritise consistency, protein and low-impact activity.';
+  }
+
+  function adjustMeal(meal, goal, style, slot){
+    if(goal === 'bulk'){
+      if(slot === 'snack') meal += ' + banana/milk';
+      if(slot === 'lunch') meal += ' + curd';
+    }
+    if(goal === 'leanbulk'){
+      if(slot === 'snack') meal += ' + fruit';
+    }
+    if(goal === 'lose' || goal === 'leancut'){
+      if(slot === 'dinner') meal += ' + salad';
+      meal = meal.replace('paratha','roti').replace('pulao','rice bowl');
+    }
+    if(style === 'budget'){
+      meal = meal.replace('paneer','dal/soya').replace('chicken','eggs/dal').replace('fish','eggs');
+    }
+    if(style === 'hostel'){
+      if(slot === 'breakfast') meal = 'Milk/curd + banana + oats/poha';
+      if(slot === 'snack') meal = 'Bhuna chana + fruit';
+    }
+    if(style === 'nocook'){
+      if(slot === 'breakfast') meal = 'Oats/milk + fruit + nuts';
+      if(slot === 'lunch') meal = 'Curd/rice bowl + ready protein option';
+      if(slot === 'snack') meal = 'Fruit + peanuts/chana';
+      if(slot === 'dinner') meal = 'Simple roti/rice + ready dal/curd';
+    }
+    if(style === 'highprotein'){
+      meal += ' + extra protein serving';
+    }
+    return meal;
+  }
+
+  function makeWeek(goal, diet, style){
+    var f = FOODS[diet] || FOODS.nonveg;
+    return WEEK.map(function(day, i){
+      return {
+        day:day,
+        benefit:BENEFITS[i],
+        breakfast:adjustMeal(f.breakfasts[i % f.breakfasts.length], goal, style, 'breakfast'),
+        lunch:adjustMeal(f.lunches[i % f.lunches.length], goal, style, 'lunch'),
+        snack:adjustMeal(f.snacks[i % f.snacks.length], goal, style, 'snack'),
+        dinner:adjustMeal(f.dinners[i % f.dinners.length], goal, style, 'dinner')
+      };
+    });
+  }
+
+  function card(title, body, color){
+    return '<div class="plan-meal-card" style="border-color:'+color+'44;background:linear-gradient(135deg,'+color+'10,rgba(255,255,255,.03));">' +
+      '<div class="plan-meal-time" style="color:'+color+';">'+title+'</div>' + body + '</div>';
+  }
+
+  function swaps(diet){
+    var protein = diet === 'vegan' ? 'tofu / soya / dal / chana' : diet === 'veg' ? 'paneer / tofu / dal / soya' : diet === 'eggetarian' ? 'eggs / paneer / dal / soya' : 'chicken / eggs / fish / paneer';
+    return [
+      'Rice <-> roti <-> poha <-> oats',
+      protein,
+      'Curd/milk <-> soy curd/plant milk if needed',
+      'Peanuts <-> makhana <-> bhuna chana',
+      'Banana <-> apple <-> dates depending on calories'
+    ];
+  }
+
+  function portionGuide(goal){
+    var bulk = goal === 'bulk' || goal === 'leanbulk';
+    var cut = goal === 'lose' || goal === 'leancut';
+    return [
+      'Rice: '+(bulk?'1.5-2 bowls':cut?'0.75-1 bowl':'1 bowl'),
+      'Roti: '+(bulk?'3-4':cut?'1-2':'2-3')+' pieces',
+      'Protein: 1 palm/serving each main meal',
+      'Dal/curd: 1 bowl',
+      'Oil: '+(cut?'1 tsp':'1-2 tsp')+' per meal',
+      'Vegetables/salad: at least 1 bowl'
+    ];
+  }
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    setupDietUi();
+    var age = parseInt((byId('pl-age') || {}).value, 10) || 22;
+    var weight = parseFloat((byId('pl-weight') || {}).value);
+    var height = parseFloat((byId('pl-height') || {}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goalKey = byId('pl-goal') ? byId('pl-goal').value : 'leanbulk';
+    var diet = byId('vf-diet-pref-v33') ? byId('vf-diet-pref-v33').value : ((profile().diet) || 'nonveg');
+    var style = byId('vf-meal-style-v33') ? byId('vf-meal-style-v33').value : 'home';
+    if(!weight || !height){ alert('Weight aur height dalo!'); return; }
+
+    var goal = GOALS[goalKey] || GOALS.leanbulk;
+    var bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var target = Math.max(1200, tdee + goal.offset);
+    var protein = Math.round(weight * goal.protein[1]);
+    var fat = Math.round(weight * ((goal.fat[0] + goal.fat[1]) / 2));
+    var carbs = Math.max(80, Math.round((target - protein*4 - fat*9) / 4));
+    window.planCalResult = target;
+    window.__vfPlanCalResultV24 = target;
+
+    var bmiColor = bmi < 18.5 ? '#29b6f6' : bmi < 25 ? '#00e5a0' : bmi < 30 ? '#ffa726' : '#ff5252';
+    var bmiCat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy' : bmi < 30 ? 'Overweight' : 'High';
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = bmi;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+bmiColor+'22;color:'+bmiColor+';border:1px solid '+bmiColor+'44;">'+bmiCat+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = bmiAdvice(bmi, goalKey);
+    if(byId('plan-cal')) byId('plan-cal').textContent = target;
+    if(byId('plan-protein')) byId('plan-protein').textContent = protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = fat+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = goal.label+' weekly diet plan';
+
+    var plan = makeWeek(goalKey, diet, style);
+    var html = '';
+    html += card('Best path', '<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+goal.label+' at '+target+' kcal/day</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">Maintenance estimate: '+tdee+' kcal. Goal adjustment: '+(goal.offset>0?'+':'')+goal.offset+' kcal. Focus: '+goal.focus+'.</div>', '#00e5a0');
+    html += card('Macro target', '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;"><div style="text-align:center;"><b style="color:#00e5a0;">'+protein+'g</b><div style="font-size:10px;color:#777;">Protein<br>muscle repair</div></div><div style="text-align:center;"><b style="color:#29b6f6;">'+carbs+'g</b><div style="font-size:10px;color:#777;">Carbs<br>training fuel</div></div><div style="text-align:center;"><b style="color:#ffa726;">'+fat+'g</b><div style="font-size:10px;color:#777;">Fats<br>hormones</div></div></div>', '#29b6f6');
+    html += card('7-day meal planner', plan.map(function(d){
+      return '<div style="border-top:1px solid rgba(255,255,255,.06);padding:9px 0;"><div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:5px;"><div style="font-size:12px;font-weight:800;color:#00e5a0;">'+d.day+'</div><div style="font-size:10px;color:#a78bfa;text-align:right;">'+d.benefit+'</div></div><div style="display:grid;gap:5px;font-size:11px;color:#ccc;line-height:1.45;"><div><b>Breakfast:</b> '+d.breakfast+'</div><div><b>Lunch:</b> '+d.lunch+'</div><div><b>Snack:</b> '+d.snack+'</div><div><b>Dinner:</b> '+d.dinner+'</div></div></div>';
+    }).join(''), '#a78bfa');
+    html += card('Easy swaps', '<div style="display:flex;gap:6px;flex-wrap:wrap;">'+swaps(diet).map(function(x){ return '<span style="font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;">'+x+'</span>'; }).join('')+'</div>', '#00b4d8');
+    html += card('Portion guide', '<div style="display:grid;gap:5px;">'+portionGuide(goalKey).map(function(x){ return '<div style="font-size:11px;color:#ccc;">- '+x+'</div>'; }).join('')+'</div>', '#ff9f1c');
+    if(byId('plan-meals-list')) byId('plan-meals-list').innerHTML = html;
+    if(byId('plan-tips')){
+      byId('plan-tips').innerHTML = [
+        'Use this as a weekly rotation, not a strict prison.',
+        'If weight is not moving after 2 weeks, adjust by 100-150 kcal.',
+        'Keep protein stable first; adjust carbs/fats for calories.',
+        'Prep 2 protein options and 2 carb options weekly to reduce effort.',
+        'Repeat meals you can actually follow.'
+      ].map(function(t){ return '- '+t; }).join('<br>');
+    }
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  var oldRenderProfile = window.renderProfile;
+  window.renderProfile = function(){
+    if(typeof oldRenderProfile === 'function') oldRenderProfile();
+    hideProfileWeekPlan();
+  };
+
+  document.addEventListener('DOMContentLoaded', setupDietUi);
+  setTimeout(setupDietUi, 250);
+  setTimeout(setupDietUi, 1000);
+})();
+/* VITALFLOW_DIET_PLANNER_V33_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_EXERCISE_RESTORE_V34_START */
+(function(){
+  if(window.__vfDietExerciseRestoreV34) return;
+  window.__vfDietExerciseRestoreV34 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function profile(){
+    try {
+      if(typeof getProfile === 'function') return getProfile();
+      return JSON.parse(localStorage.getItem('nf_profile') || '{}');
+    } catch(e){ return {}; }
+  }
+
+  var GOALS = {
+    bulk:{label:'Bulk', offset:500, protein:[1.6,2.0], fat:[0.8,1.0], focus:'faster size gain'},
+    leanbulk:{label:'Lean Bulk', offset:250, protein:[1.8,2.1], fat:[0.8,1.0], focus:'aesthetic muscle gain'},
+    maintain:{label:'Maintain / Recomp', offset:0, protein:[1.6,2.0], fat:[0.7,1.0], focus:'stable energy and recomposition'},
+    leancut:{label:'Lean Cut', offset:-300, protein:[2.0,2.2], fat:[0.7,0.9], focus:'definition while keeping strength'},
+    lose:{label:'Cut', offset:-500, protein:[2.0,2.3], fat:[0.6,0.8], focus:'faster fat loss'}
+  };
+
+  var EXERCISES = {
+    gym:{
+      Chest:['Barbell bench press','Incline dumbbell press','Chest press machine','Pec deck fly','Cable fly','Weighted dips'],
+      Back:['Lat pulldown','Seated cable row','Chest-supported row','Bent-over row','One-arm dumbbell row','Assisted pull-up'],
+      Shoulders:['Overhead press','Dumbbell shoulder press','Lateral raise','Rear delt fly','Face pull','Machine shoulder press'],
+      Legs:['Squat or hack squat','Leg press','Romanian deadlift','Leg extension','Hamstring curl','Standing calf raise'],
+      Arms:['Barbell curl','Incline dumbbell curl','Hammer curl','Triceps pushdown','Overhead triceps extension','Close-grip bench press'],
+      Core:['Cable crunch','Hanging knee raise','Ab wheel rollout','Pallof press','Reverse crunch','Plank']
+    },
+    calisthenics:{
+      Chest:['Push-up','Decline push-up','Diamond push-up','Archer push-up','Dips','Pseudo planche push-up'],
+      Back:['Pull-up','Chin-up','Inverted row','Australian pull-up','Scapular pull-up','Towel row'],
+      Shoulders:['Pike push-up','Wall handstand hold','Wall walk','Handstand push-up progression','Planche lean','Hindu push-up'],
+      Legs:['Bodyweight squat','Bulgarian split squat','Walking lunge','Jump squat','Pistol squat progression','Glute bridge'],
+      Arms:['Chin-up','Diamond push-up','Bench dip','Bodyweight triceps extension','Close-grip push-up','Ring/towel curl'],
+      Core:['Hollow body hold','Plank','Side plank','Hanging knee raise','L-sit progression','Leg raise']
+    },
+    home:{
+      Chest:['Push-up','Deficit push-up','Floor dumbbell press','Dumbbell fly','Resistance-band press','Chair dips'],
+      Back:['One-arm backpack row','Resistance-band row','Prone Y raise','Reverse snow angel','Towel row','Dumbbell row'],
+      Shoulders:['Pike push-up','Dumbbell shoulder press','Lateral raise','Rear delt raise','Wall walk','Band face pull'],
+      Legs:['Goblet squat','Split squat','Walking lunge','Romanian deadlift','Glute bridge','Calf raise'],
+      Arms:['Dumbbell curl','Hammer curl','Band curl','Chair dip','Overhead extension','Close-grip push-up'],
+      Core:['Plank','Dead bug','Reverse crunch','Mountain climber','Leg raise','Side plank']
+    }
+  };
+
+  var WEEK = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var BENEFITS = ['Training fuel and stable energy','High protein recovery support','Fiber and digestion support','Balanced carbs for performance','Simple meals for consistency','Micronutrient variety','Flexible day to avoid diet fatigue'];
+  var FOODS = {
+    vegan:{breakfasts:['Oats with soy milk + banana','Poha + peanuts + sprouts','Besan chilla + chutney','Dalia with plant milk','Sattu drink + toast','Upma + sprouts','Peanut butter toast + fruit'],lunches:['Rajma rice + salad','Chana rice bowl','Dal + roti + sabzi','Soya pulao + salad','Khichdi + pickle + salad','Tofu rice bowl','Chole + roti + salad'],snacks:['Sattu shake','Bhuna chana','Peanut butter toast','Makhana','Fruit + peanuts','Sprouts chaat','Dates + soy milk'],dinners:['Tofu sabzi + roti','Dal + rice + salad','Soya curry + roti','Chana soup + roti','Rajma + roti','Vegetable khichdi','Tofu stir fry + rice']},
+    veg:{breakfasts:['Oats with milk + banana','Poha + curd','Paneer paratha + curd','Besan chilla + paneer','Dalia with milk','Upma + curd','Moong dal chilla'],lunches:['Paneer rice bowl','Rajma rice + curd','Dal + roti + sabzi','Soya pulao + curd','Khichdi + curd','Chole + rice','Palak paneer + roti'],snacks:['Dahi + banana','Paneer sandwich','Sattu shake','Makhana + milk','Bhuna chana','Peanut butter toast','Lassi + fruit'],dinners:['Paneer bhurji + roti','Dal + rice + salad','Soya curry + roti','Palak paneer + roti','Rajma + roti','Vegetable khichdi + curd','Dal tadka + roti']},
+    eggetarian:{breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Egg paratha + curd','Dalia + boiled eggs','Besan chilla + eggs','Moong dal chilla + omelette'],lunches:['Egg curry + rice','Dal roti + boiled eggs','Paneer rice bowl','Rajma rice + egg','Chole + roti + egg','Soya pulao + curd','Khichdi + boiled eggs'],snacks:['Boiled eggs + fruit','Egg sandwich','Dahi + banana','Sattu shake','Milk + peanuts','Paneer toast','Makhana + tea'],dinners:['Egg bhurji + roti','Dal + rice + omelette','Paneer bhurji + roti','Egg curry + roti','Khichdi + curd + egg','Soya curry + roti','Dal tadka + boiled eggs']},
+    nonveg:{breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Chicken sandwich + milk','Dalia + eggs','Besan chilla + eggs','Moong dal chilla + curd'],lunches:['Chicken rice bowl','Egg curry + rice','Dal roti + chicken','Fish curry + rice','Paneer roti plate','Rajma rice + eggs','Chicken curry + roti'],snacks:['Chicken sandwich','Boiled eggs + fruit','Protein shake','Dahi + banana','Milk + peanuts','Paneer toast','Sattu shake'],dinners:['Chicken curry + roti','Fish + rice + salad','Egg bhurji + roti','Dal + chicken + rice','Paneer bhurji + roti','Khichdi + eggs','Chicken soup + roti']}
+  };
+
+  function setupDietUi(){
+    var oldWeek = byId('week-plan-section');
+    if(oldWeek) oldWeek.style.display = 'none';
+    var goal = byId('pl-goal');
+    if(goal){
+      goal.innerHTML = '<option value="leanbulk">Lean Bulk - aesthetic muscle</option><option value="bulk">Bulk - faster size gain</option><option value="maintain">Maintain / Recomp</option><option value="leancut">Lean Cut - definition</option><option value="lose">Cut - fat loss</option>';
+    }
+    if(byId('vf-diet-v33-fields')) return;
+    if(!goal || !goal.parentNode) return;
+    var saved = profile();
+    var box = document.createElement('div');
+    box.id = 'vf-diet-v33-fields';
+    box.style.cssText = 'border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px;';
+    box.innerHTML =
+      '<div class="grid2" style="margin-bottom:8px;">' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Diet preference</div><select class="sel" id="vf-diet-pref-v33" style="margin:0;"><option value="nonveg">Non-vegetarian</option><option value="eggetarian">Eggetarian</option><option value="veg">Vegetarian</option><option value="vegan">Vegan</option></select></div>' +
+        '<div><div style="font-size:10px;color:#555;margin-bottom:3px;">Meal style</div><select class="sel" id="vf-meal-style-v33" style="margin:0;"><option value="home">Indian home food</option><option value="budget">Budget plan</option><option value="hostel">Hostel/simple food</option><option value="highprotein">High-protein plan</option><option value="nocook">No-cooking plan</option></select></div>' +
+      '</div>';
+    goal.parentNode.insertBefore(box, goal.nextSibling);
+    var pref = byId('vf-diet-pref-v33');
+    if(pref && saved.diet) pref.value = saved.diet;
+  }
+
+  function selectedFocus(){
+    var chips = byId('vf-focus-chips-v22');
+    if(!chips) return ['Chest','Back','Shoulders'];
+    var arr = Array.prototype.slice.call(chips.querySelectorAll('button')).filter(function(b){ return b.dataset.active === '1'; }).map(function(b){ return b.dataset.value; });
+    return arr.length ? arr : ['Chest','Back','Shoulders'];
+  }
+  function adjustMeal(meal, goal, style, slot){
+    if(goal === 'bulk'){ if(slot === 'snack') meal += ' + banana/milk'; if(slot === 'lunch') meal += ' + curd'; }
+    if(goal === 'leanbulk' && slot === 'snack') meal += ' + fruit';
+    if(goal === 'lose' || goal === 'leancut'){ if(slot === 'dinner') meal += ' + salad'; meal = meal.replace('paratha','roti').replace('pulao','rice bowl'); }
+    if(style === 'budget') meal = meal.replace('paneer','dal/soya').replace('chicken','eggs/dal').replace('fish','eggs');
+    if(style === 'hostel'){ if(slot === 'breakfast') meal = 'Milk/curd + banana + oats/poha'; if(slot === 'snack') meal = 'Bhuna chana + fruit'; }
+    if(style === 'nocook'){ if(slot === 'breakfast') meal = 'Oats/milk + fruit + nuts'; if(slot === 'lunch') meal = 'Curd/rice bowl + ready protein option'; if(slot === 'snack') meal = 'Fruit + peanuts/chana'; if(slot === 'dinner') meal = 'Simple roti/rice + ready dal/curd'; }
+    if(style === 'highprotein') meal += ' + extra protein serving';
+    return meal;
+  }
+  function makeWeek(goal, diet, style){
+    var f = FOODS[diet] || FOODS.nonveg;
+    return WEEK.map(function(day, i){
+      return {day:day, benefit:BENEFITS[i], breakfast:adjustMeal(f.breakfasts[i%f.breakfasts.length],goal,style,'breakfast'), lunch:adjustMeal(f.lunches[i%f.lunches.length],goal,style,'lunch'), snack:adjustMeal(f.snacks[i%f.snacks.length],goal,style,'snack'), dinner:adjustMeal(f.dinners[i%f.dinners.length],goal,style,'dinner')};
+    });
+  }
+  function bmiAdvice(bmi, goal){
+    if(bmi < 18.5) return (goal === 'lose' || goal === 'leancut') ? 'Your BMI is low. Cutting is not ideal right now; lean bulk is better for muscle and health.' : 'Your BMI is low, so lean bulk is a strong choice. Gain slowly and keep training progressive.';
+    if(bmi < 25) return goal === 'leanbulk' ? 'Healthy BMI plus aesthetic goal: lean bulk fits well. Aim for slow weight gain and better lifts.' : goal === 'leancut' ? 'Healthy BMI: lean cut works if definition is priority, but keep the deficit small.' : goal === 'bulk' ? 'Bulk can work, but lean bulk is usually cleaner for an aesthetic look.' : 'Healthy BMI: maintain/recomp or lean bulk are both reasonable.';
+    if(bmi < 30) return (goal === 'bulk' || goal === 'leanbulk') ? 'BMI is above healthy range. For aesthetics, a lean cut first may be better than bulking.' : 'A cut or lean cut fits this BMI well. Keep protein high and train hard.';
+    return (goal === 'bulk' || goal === 'leanbulk') ? 'BMI is high for bulking. A controlled cut is usually the safer first phase.' : 'A steady deficit is a good first phase. Prioritise consistency, protein and low-impact activity.';
+  }
+  function swaps(diet){
+    var protein = diet === 'vegan' ? 'tofu / soya / dal / chana' : diet === 'veg' ? 'paneer / tofu / dal / soya' : diet === 'eggetarian' ? 'eggs / paneer / dal / soya' : 'chicken / eggs / fish / paneer';
+    return ['Rice <-> roti <-> poha <-> oats', protein, 'Curd/milk <-> soy curd/plant milk if needed', 'Peanuts <-> makhana <-> bhuna chana', 'Banana <-> apple <-> dates depending on calories'];
+  }
+  function portionGuide(goal){
+    var bulk = goal === 'bulk' || goal === 'leanbulk';
+    var cut = goal === 'lose' || goal === 'leancut';
+    return ['Rice: '+(bulk?'1.5-2 bowls':cut?'0.75-1 bowl':'1 bowl'), 'Roti: '+(bulk?'3-4':cut?'1-2':'2-3')+' pieces', 'Protein: 1 palm/serving each main meal', 'Dal/curd: 1 bowl', 'Oil: '+(cut?'1 tsp':'1-2 tsp')+' per meal', 'Vegetables/salad: at least 1 bowl'];
+  }
+  function trainingPlan(type, focus, days, goal){
+    var lib = type === 'mixed' ? EXERCISES.gym : (EXERCISES[type] || EXERCISES.gym);
+    var alt = type === 'mixed' ? EXERCISES.calisthenics : null;
+    var volume = goal === 'bulk' || goal === 'leanbulk' ? 'Aim around 10-16 hard sets per focus muscle per week.' : goal === 'lose' || goal === 'leancut' ? 'Keep 6-12 quality sets per muscle and avoid junk volume when recovery is low.' : 'Train each major muscle 2x/week if possible.';
+    return {split:days <= 3 ? 'Full body '+days+' days/week' : days === 4 ? 'Upper/lower or push-pull 4 days/week' : 'Push-pull-legs style '+days+' days/week', volume:volume, groups:focus.map(function(m){ var list=(lib[m]||EXERCISES.gym[m]||[]).slice(0,6); if(alt&&alt[m]) list=list.slice(0,3).concat(alt[m].slice(0,3)); return {muscle:m, exercises:list}; })};
+  }
+  function card(title, body, color){
+    return '<div class="plan-meal-card" style="border-color:'+color+'44;background:linear-gradient(135deg,'+color+'10,rgba(255,255,255,.03));"><div class="plan-meal-time" style="color:'+color+';">'+title+'</div>'+body+'</div>';
+  }
+
+  window.generatePlan = function(){
+    setupDietUi();
+    var age = parseInt((byId('pl-age')||{}).value,10)||22;
+    var weight = parseFloat((byId('pl-weight')||{}).value);
+    var height = parseFloat((byId('pl-height')||{}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goalKey = byId('pl-goal') ? byId('pl-goal').value : 'leanbulk';
+    var diet = byId('vf-diet-pref-v33') ? byId('vf-diet-pref-v33').value : ((profile().diet) || 'nonveg');
+    var style = byId('vf-meal-style-v33') ? byId('vf-meal-style-v33').value : 'home';
+    var training = byId('vf-training-v22') ? byId('vf-training-v22').value : 'gym';
+    var days = Math.max(1, Math.min(7, parseInt((byId('vf-train-days-v22')||{}).value,10)||4));
+    if(!weight || !height){ alert('Weight aur height dalo!'); return; }
+
+    var goal = GOALS[goalKey] || GOALS.leanbulk;
+    var bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var target = Math.max(1200, tdee + goal.offset);
+    var protein = Math.round(weight * goal.protein[1]);
+    var fat = Math.round(weight * ((goal.fat[0]+goal.fat[1])/2));
+    var carbs = Math.max(80, Math.round((target - protein*4 - fat*9)/4));
+    window.planCalResult = target;
+    window.__vfPlanCalResultV24 = target;
+
+    var bmiColor = bmi < 18.5 ? '#29b6f6' : bmi < 25 ? '#00e5a0' : bmi < 30 ? '#ffa726' : '#ff5252';
+    var bmiCat = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Healthy' : bmi < 30 ? 'Overweight' : 'High';
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = bmi;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+bmiColor+'22;color:'+bmiColor+';border:1px solid '+bmiColor+'44;">'+bmiCat+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = bmiAdvice(bmi, goalKey);
+    if(byId('plan-cal')) byId('plan-cal').textContent = target;
+    if(byId('plan-protein')) byId('plan-protein').textContent = protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = fat+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = goal.label+' diet + training plan';
+
+    var week = makeWeek(goalKey, diet, style);
+    var focus = selectedFocus();
+    var train = trainingPlan(training, focus, days, goalKey);
+    var html = '';
+    html += card('Best path','<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+goal.label+' at '+target+' kcal/day</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">Maintenance estimate: '+tdee+' kcal. Goal adjustment: '+(goal.offset>0?'+':'')+goal.offset+' kcal. Focus: '+goal.focus+'.</div>','#00e5a0');
+    html += card('Macro target','<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;"><div style="text-align:center;"><b style="color:#00e5a0;">'+protein+'g</b><div style="font-size:10px;color:#777;">Protein<br>muscle repair</div></div><div style="text-align:center;"><b style="color:#29b6f6;">'+carbs+'g</b><div style="font-size:10px;color:#777;">Carbs<br>training fuel</div></div><div style="text-align:center;"><b style="color:#ffa726;">'+fat+'g</b><div style="font-size:10px;color:#777;">Fats<br>hormones</div></div></div>','#29b6f6');
+    html += card('7-day meal planner', week.map(function(d){ return '<div style="border-top:1px solid rgba(255,255,255,.06);padding:9px 0;"><div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:5px;"><div style="font-size:12px;font-weight:800;color:#00e5a0;">'+d.day+'</div><div style="font-size:10px;color:#a78bfa;text-align:right;">'+d.benefit+'</div></div><div style="display:grid;gap:5px;font-size:11px;color:#ccc;line-height:1.45;"><div><b>Breakfast:</b> '+d.breakfast+'</div><div><b>Lunch:</b> '+d.lunch+'</div><div><b>Snack:</b> '+d.snack+'</div><div><b>Dinner:</b> '+d.dinner+'</div></div></div>'; }).join(''), '#a78bfa');
+    html += card('Easy swaps','<div style="display:flex;gap:6px;flex-wrap:wrap;">'+swaps(diet).map(function(x){return '<span style="font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;">'+x+'</span>';}).join('')+'</div>','#00b4d8');
+    html += card('Portion guide','<div style="display:grid;gap:5px;">'+portionGuide(goalKey).map(function(x){return '<div style="font-size:11px;color:#ccc;">- '+x+'</div>';}).join('')+'</div>','#ff9f1c');
+    html += card('Training structure','<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+train.split+'</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">'+train.volume+'</div>','#ff9f1c');
+    train.groups.forEach(function(g){ html += card(g.muscle+' exercises','<div style="display:flex;gap:6px;flex-wrap:wrap;">'+g.exercises.map(function(x){ return '<span style="font-size:11px;color:#ccc;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:999px;padding:5px 9px;">'+x+'</span>'; }).join('')+'</div>','#00b4d8'); });
+
+    if(byId('plan-meals-list')) byId('plan-meals-list').innerHTML = html;
+    if(byId('plan-tips')) byId('plan-tips').innerHTML = ['Use this as a weekly rotation, not a strict prison.','If weight is not moving after 2 weeks, adjust by 100-150 kcal.','Keep protein stable first; adjust carbs/fats for calories.','Prep 2 protein options and 2 carb options weekly to reduce effort.','Repeat meals you can actually follow.'].map(function(t){return '- '+t;}).join('<br>');
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  document.addEventListener('DOMContentLoaded', setupDietUi);
+  setTimeout(setupDietUi, 250);
+  setTimeout(setupDietUi, 1000);
+})();
+/* VITALFLOW_DIET_EXERCISE_RESTORE_V34_END */
+</script>
+
+<script>
+/* VITALFLOW_DIET_EDIT_V35_START */
+(function(){
+  if(window.__vfDietEditV35) return;
+  window.__vfDietEditV35 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function getSavedFoods(){
+    try {
+      var custom = typeof getCF === 'function' ? getCF() : JSON.parse(localStorage.getItem('nf_cf') || '[]');
+      var built = Array.isArray(window.BUILTIN_FOODS) ? window.BUILTIN_FOODS : [];
+      return built.concat(custom).filter(function(f){ return f && f.name; });
+    } catch(e){ return []; }
+  }
+
+  function exerciseCards(){
+    return Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card')).filter(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      return title && title.textContent.indexOf('exercises') >= 0;
+    });
+  }
+  function categoryFromCard(card){
+    var title = card.querySelector('.plan-meal-time');
+    return title ? title.textContent.replace(' exercises','').trim() : 'General';
+  }
+  function exerciseRow(name, note){
+    return '<div class="vf-ex-row-v35" data-name="'+esc(name)+'" data-note="'+esc(note || '')+'" style="display:flex;align-items:center;gap:8px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 9px;">' +
+      '<div class="vf-ex-name-v35" style="font-size:12px;color:#e0e0e0;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(name)+'</div>' +
+      '<button type="button" class="vf-ex-view-v35" style="background:rgba(0,180,216,.1);border:1px solid rgba(0,180,216,.35);color:#29b6f6;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">View</button>' +
+      '<button type="button" class="vf-ex-edit-v35" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.35);color:#00e5a0;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">Edit</button>' +
+    '</div>';
+  }
+
+  function compactExercises(){
+    var cards = exerciseCards();
+    cards.forEach(function(card){
+      if(card.dataset.v35Compact === 'done') return;
+      card.dataset.v35Compact = 'done';
+
+      var names = [];
+      Array.prototype.slice.call(card.querySelectorAll('.vf-ex-row-v32,.vf-ex-row-v31')).forEach(function(r){
+        var n = r.dataset.name || ((r.querySelector('.vf-ex-name-v32,.vf-ex-name-v35') || {}).textContent || '');
+        var note = r.dataset.note || ((r.querySelector('textarea') || {}).value || '');
+        if(n.trim()) names.push({name:n.trim(), note:note.trim()});
+      });
+      if(!names.length){
+        Array.prototype.slice.call(card.querySelectorAll('span')).forEach(function(s){
+          var t = s.textContent.trim();
+          if(t) names.push({name:t, note:''});
+        });
+      }
+      if(!names.length) return;
+
+      Array.prototype.slice.call(card.children).forEach(function(child){
+        if(!child.classList || !child.classList.contains('plan-meal-time')) child.style.display = 'none';
+      });
+
+      var list = document.createElement('div');
+      list.className = 'vf-ex-list-v35';
+      list.style.cssText = 'display:grid;gap:7px;margin-top:8px;';
+      list.innerHTML = names.map(function(x){ return exerciseRow(x.name, x.note); }).join('');
+      card.appendChild(list);
+    });
+    addGlobalExerciseButton();
+  }
+
+  function addGlobalExerciseButton(){
+    if(byId('vf-global-add-exercise-v35')) return;
+    var first = exerciseCards()[0];
+    if(!first || !first.parentNode) return;
+    var btn = document.createElement('button');
+    btn.id = 'vf-global-add-exercise-v35';
+    btn.type = 'button';
+    btn.textContent = '+ Add Exercise';
+    btn.style.cssText = 'width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;margin:8px 0;';
+    btn.onclick = function(){ openExerciseEditor(null); };
+    first.parentNode.insertBefore(btn, first);
+  }
+
+  function openExerciseViewer(row){
+    var old = byId('vf-ex-modal-v35');
+    if(old) old.remove();
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v35';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    var name = row.dataset.name || '';
+    var note = row.dataset.note || '';
+    modal.innerHTML = '<div style="width:100%;max-height:70vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+esc(name)+'</div><button id="vf-ex-close-v35" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:5px;">Notes / instructions</div><div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;font-size:13px;color:#d0d0dc;line-height:1.6;white-space:pre-wrap;">'+esc(note || 'No notes added yet.')+'</div></div>';
+    document.body.appendChild(modal);
+    byId('vf-ex-close-v35').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+  }
+
+  function openExerciseEditor(row){
+    var old = byId('vf-ex-modal-v35');
+    if(old) old.remove();
+    var isNew = !row;
+    var cat = row ? categoryFromCard(row.closest('.plan-meal-card')) : 'Chest';
+    var cats = ['Chest','Back','Shoulders','Legs','Arms','Core'];
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v35';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+(isNew?'Add Exercise':'Edit Exercise')+'</div><button id="vf-ex-close-v35" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Category</div><select id="vf-ex-cat-v35" class="sel">'+cats.map(function(c){return '<option value="'+c+'" '+(c===cat?'selected':'')+'>'+c+'</option>';}).join('')+'</select>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Exercise name</div><input id="vf-ex-name-v35" class="inp" value="'+esc(row ? row.dataset.name : '')+'" placeholder="Exercise name">' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Notes / instructions</div><textarea id="vf-ex-note-v35" class="inp" style="height:110px;resize:none;" placeholder="Sets, reps, form cues, machine setting...">'+esc(row ? row.dataset.note : '')+'</textarea>' +
+      '<button id="vf-ex-save-v35" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save</button>' +
+      (!isNew ? '<button id="vf-ex-delete-v35" style="width:100%;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;margin-top:8px;">Delete Exercise</button>' : '') +
+    '</div>';
+    document.body.appendChild(modal);
+    byId('vf-ex-close-v35').onclick = function(){ modal.remove(); };
+    byId('vf-ex-save-v35').onclick = function(){
+      var name = byId('vf-ex-name-v35').value.trim();
+      var note = byId('vf-ex-note-v35').value.trim();
+      var newCat = byId('vf-ex-cat-v35').value;
+      if(!name){ alert('Exercise name dalo.'); return; }
+      var card = exerciseCards().find(function(c){ return categoryFromCard(c) === newCat; });
+      if(!card){ alert('Category not found in this plan.'); return; }
+      var list = card.querySelector('.vf-ex-list-v35') || card.querySelector('.vf-ex-list-v32');
+      if(!list){
+        list = document.createElement('div');
+        list.className = 'vf-ex-list-v35';
+        list.style.cssText = 'display:grid;gap:7px;margin-top:8px;';
+        card.appendChild(list);
+      }
+      if(row){
+        row.dataset.name = name;
+        row.dataset.note = note;
+        var label = row.querySelector('.vf-ex-name-v35,.vf-ex-name-v32');
+        if(label) label.textContent = name;
+        if(row.parentNode !== list) list.appendChild(row);
+      } else {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = exerciseRow(name, note);
+        list.appendChild(tmp.firstChild);
+      }
+      modal.remove();
+    };
+    var del = byId('vf-ex-delete-v35');
+    if(del) del.onclick = function(){ if(confirm('Delete this exercise?')){ row.remove(); modal.remove(); } };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+  }
+
+  function mealCards(){
+    return Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card')).filter(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      return title && title.textContent.indexOf('7-day meal planner') >= 0;
+    });
+  }
+
+  function enhanceMealPlanner(){
+    mealCards().forEach(function(card){
+      if(card.dataset.v35Meals === 'done') return;
+      card.dataset.v35Meals = 'done';
+      var dayBlocks = Array.prototype.slice.call(card.children).filter(function(el){
+        return el.tagName === 'DIV' && el.textContent.indexOf('Breakfast:') >= 0;
+      });
+      dayBlocks.forEach(function(dayBlock){
+        Array.prototype.slice.call(dayBlock.querySelectorAll('div')).forEach(function(line){
+          var txt = line.textContent || '';
+          var match = txt.match(/^(Breakfast|Lunch|Snack|Dinner):\s*(.+)$/);
+          if(!match || line.dataset.v35MealLine === 'done') return;
+          line.dataset.v35MealLine = 'done';
+          line.innerHTML = '<div style="display:flex;gap:7px;align-items:flex-start;justify-content:space-between;"><div class="vf-meal-text-v35" style="flex:1;"><b>'+match[1]+':</b> <span>'+esc(match[2])+'</span></div><button type="button" class="vf-meal-del-v35" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.3);color:#ff4d6d;border-radius:7px;padding:3px 7px;font-size:10px;font-weight:800;">Delete</button></div>';
+        });
+        var add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'vf-meal-add-v35';
+        add.textContent = '+ Add Food';
+        add.style.cssText = 'margin-top:7px;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:6px 10px;font-size:11px;font-weight:800;font-family:inherit;';
+        add.onclick = function(){ openFoodAddModal(dayBlock); };
+        dayBlock.appendChild(add);
+      });
+    });
+  }
+
+  function openFoodAddModal(dayBlock){
+    var old = byId('vf-food-modal-v35');
+    if(old) old.remove();
+    var foods = getSavedFoods().slice(0, 300);
+    var modal = document.createElement('div');
+    modal.id = 'vf-food-modal-v35';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">Add Food</div><button id="vf-food-close-v35" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Meal slot</div><select id="vf-food-slot-v35" class="sel"><option>Breakfast</option><option>Lunch</option><option>Snack</option><option>Dinner</option></select>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Saved food / custom name</div><input id="vf-food-name-v35" class="inp" list="vf-food-list-v35" placeholder="Type food name or choose saved food"><datalist id="vf-food-list-v35">'+foods.map(function(f){ return '<option value="'+esc(f.name)+'">'; }).join('')+'</datalist>' +
+      '<button id="vf-food-save-v35" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Add Food</button>' +
+    '</div>';
+    document.body.appendChild(modal);
+    byId('vf-food-close-v35').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+    byId('vf-food-save-v35').onclick = function(){
+      var slot = byId('vf-food-slot-v35').value;
+      var name = byId('vf-food-name-v35').value.trim();
+      if(!name){ alert('Food name dalo.'); return; }
+      var line = document.createElement('div');
+      line.dataset.v35MealLine = 'done';
+      line.innerHTML = '<div style="display:flex;gap:7px;align-items:flex-start;justify-content:space-between;"><div class="vf-meal-text-v35" style="flex:1;"><b>'+slot+':</b> <span>'+esc(name)+'</span></div><button type="button" class="vf-meal-del-v35" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.3);color:#ff4d6d;border-radius:7px;padding:3px 7px;font-size:10px;font-weight:800;">Delete</button></div>';
+      var addBtn = dayBlock.querySelector('.vf-meal-add-v35');
+      dayBlock.insertBefore(line, addBtn);
+      modal.remove();
+    };
+  }
+
+  document.addEventListener('click', function(e){
+    var view = e.target.closest('.vf-ex-view-v35,.vf-ex-view-v32');
+    if(view){ openExerciseViewer(view.closest('.vf-ex-row-v35,.vf-ex-row-v32')); return; }
+    var edit = e.target.closest('.vf-ex-edit-v35,.vf-ex-edit-v32');
+    if(edit){ openExerciseEditor(edit.closest('.vf-ex-row-v35,.vf-ex-row-v32')); return; }
+    var delMeal = e.target.closest('.vf-meal-del-v35');
+    if(delMeal){ delMeal.closest('div[data-v35-meal-line], div').remove(); return; }
+  });
+
+  var oldGenerate = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGenerate === 'function') oldGenerate();
+    setTimeout(function(){ compactExercises(); enhanceMealPlanner(); }, 220);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(function(){ compactExercises(); enhanceMealPlanner(); }, 1200); });
+})();
+/* VITALFLOW_DIET_EDIT_V35_END */
+</script>
+
+<script>
+/* VITALFLOW_MEAL_EDITOR_V36_START */
+(function(){
+  if(window.__vfMealEditorV36) return;
+  window.__vfMealEditorV36 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function days(){ return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; }
+  function slots(){ return ['Breakfast','Lunch','Snack','Dinner']; }
+  function getSavedFoods(){
+    try {
+      var custom = typeof getCF === 'function' ? getCF() : JSON.parse(localStorage.getItem('nf_cf') || '[]');
+      var built = Array.isArray(window.BUILTIN_FOODS) ? window.BUILTIN_FOODS : [];
+      return built.concat(custom).filter(function(f){ return f && f.name; });
+    } catch(e){ return []; }
+  }
+
+  function mealPlannerCard(){
+    return Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card')).find(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      return title && title.textContent.indexOf('7-day meal planner') >= 0;
+    });
+  }
+
+  function rowHtml(slot, food, cal, p, c, f){
+    return '<div class="vf-meal-row-v36" data-slot="'+esc(slot)+'" data-food="'+esc(food)+'" data-cal="'+(cal||0)+'" data-p="'+(p||0)+'" data-c="'+(c||0)+'" data-f="'+(f||0)+'" style="display:flex;align-items:center;gap:7px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 8px;margin-bottom:5px;">' +
+      '<div style="flex:1;min-width:0;"><div style="font-size:11px;color:#888;font-weight:800;">'+esc(slot)+'</div><div class="vf-meal-food-v36" style="font-size:12px;color:#e0e0e0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(food)+'</div><div class="vf-meal-macro-v36" style="font-size:10px;color:#666;">'+macroText(cal,p,c,f)+'</div></div>' +
+      '<button type="button" class="vf-meal-edit-v36" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.35);color:#00e5a0;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:800;">Edit</button>' +
+      '<button type="button" class="vf-meal-delete-v36" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.35);color:#ff4d6d;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:800;">Delete</button>' +
+    '</div>';
+  }
+  function macroText(cal,p,c,f){
+    if(!(cal||p||c||f)) return 'No nutrition added';
+    return (cal||0)+' kcal Â· '+(p||0)+'g P Â· '+(c||0)+'g C Â· '+(f||0)+'g F';
+  }
+
+  function parsePlanner(){
+    var card = mealPlannerCard();
+    if(!card || card.dataset.v36Meals === 'done') return;
+    card.dataset.v36Meals = 'done';
+
+    Array.prototype.slice.call(card.querySelectorAll('.vf-meal-add-v35,.vf-meal-del-v35')).forEach(function(el){
+      var wrap = el.closest('button') || el;
+      if(wrap) wrap.style.display = 'none';
+    });
+
+    var rawText = card.innerText || card.textContent || '';
+    var parsed = {};
+    days().forEach(function(d){ parsed[d] = []; });
+    var currentDay = null;
+    rawText.split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(line){
+      if(days().indexOf(line) >= 0){ currentDay = line; return; }
+      var m = line.match(/^(Breakfast|Lunch|Snack|Dinner):\s*(.+)$/);
+      if(currentDay && m) parsed[currentDay].push({slot:m[1], food:m[2], cal:0, p:0, c:0, f:0});
+    });
+    var hasMeals = days().some(function(d){ return parsed[d].length; });
+    if(!hasMeals) return;
+
+    Array.prototype.slice.call(card.children).forEach(function(child){
+      if(!child.classList || !child.classList.contains('plan-meal-time')) child.style.display = 'none';
+    });
+
+    var wrap = document.createElement('div');
+    wrap.id = 'vf-meal-planner-v36';
+    wrap.style.cssText = 'display:grid;gap:10px;margin-top:8px;';
+    wrap.innerHTML = days().map(function(day){
+      var rows = parsed[day].map(function(x){ return rowHtml(x.slot, x.food, x.cal, x.p, x.c, x.f); }).join('');
+      return '<div class="vf-day-block-v36" data-day="'+day+'" style="background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:9px;">' +
+        '<div style="font-size:12px;font-weight:900;color:#00e5a0;margin-bottom:7px;">'+day+'</div>' +
+        '<div class="vf-day-meals-v36">'+rows+'</div>' +
+      '</div>';
+    }).join('');
+    card.appendChild(wrap);
+
+    addGlobalFoodButton(card);
+  }
+
+  function addGlobalFoodButton(card){
+    if(byId('vf-global-add-food-v36')) return;
+    var btn = document.createElement('button');
+    btn.id = 'vf-global-add-food-v36';
+    btn.type = 'button';
+    btn.textContent = '+ Add Food';
+    btn.style.cssText = 'width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;margin:8px 0;';
+    btn.onclick = function(){ openFoodEditor(null); };
+    card.parentNode.insertBefore(btn, card.nextSibling);
+  }
+
+  function openFoodEditor(row){
+    var old = byId('vf-food-modal-v36');
+    if(old) old.remove();
+    var isNew = !row;
+    var foods = getSavedFoods().slice(0, 400);
+    var currentDay = row ? row.closest('.vf-day-block-v36').dataset.day : days()[0];
+    var currentSlot = row ? row.dataset.slot : 'Breakfast';
+    var modal = document.createElement('div');
+    modal.id = 'vf-food-modal-v36';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:88vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+(isNew?'Add Food':'Edit Food')+'</div><button id="vf-food-close-v36" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>' +
+      '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Day</div><select id="vf-food-day-v36" class="sel" style="margin:0;">'+days().map(function(d){return '<option '+(d===currentDay?'selected':'')+'>'+d+'</option>';}).join('')+'</select></div><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Timing</div><select id="vf-food-slot-v36" class="sel" style="margin:0;">'+slots().map(function(s){return '<option '+(s===currentSlot?'selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Saved food / custom name</div><input id="vf-food-name-v36" class="inp" list="vf-food-list-v36" value="'+esc(row ? row.dataset.food : '')+'" placeholder="Choose saved food or type food name"><datalist id="vf-food-list-v36">'+foods.map(function(f){return '<option value="'+esc(f.name)+'">';}).join('')+'</datalist>' +
+      '<div class="grid2" style="margin-bottom:7px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Calories</div><input id="vf-food-cal-v36" class="inp" type="number" value="'+esc(row ? row.dataset.cal : '')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Protein (g)</div><input id="vf-food-p-v36" class="inp" type="number" value="'+esc(row ? row.dataset.p : '')+'" style="margin:0;"></div></div>' +
+      '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Carbs (g)</div><input id="vf-food-c-v36" class="inp" type="number" value="'+esc(row ? row.dataset.c : '')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Fats (g)</div><input id="vf-food-f-v36" class="inp" type="number" value="'+esc(row ? row.dataset.f : '')+'" style="margin:0;"></div></div>' +
+      '<button id="vf-food-save-v36" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save Food</button>' +
+      (!isNew ? '<button id="vf-food-delete-v36" style="width:100%;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;margin-top:8px;">Delete Food</button>' : '') +
+    '</div>';
+    document.body.appendChild(modal);
+    byId('vf-food-close-v36').onclick = function(){ modal.remove(); };
+    byId('vf-food-name-v36').onchange = function(){
+      var val = byId('vf-food-name-v36').value.trim().toLowerCase();
+      var match = foods.find(function(f){ return String(f.name).toLowerCase() === val; });
+      if(match){
+        byId('vf-food-cal-v36').value = match.cal || 0;
+        byId('vf-food-p-v36').value = match.p || 0;
+        byId('vf-food-c-v36').value = match.c || 0;
+        byId('vf-food-f-v36').value = match.f || 0;
+      }
+    };
+    byId('vf-food-save-v36').onclick = function(){
+      var day = byId('vf-food-day-v36').value;
+      var slot = byId('vf-food-slot-v36').value;
+      var food = byId('vf-food-name-v36').value.trim();
+      var cal = parseFloat(byId('vf-food-cal-v36').value) || 0;
+      var p = parseFloat(byId('vf-food-p-v36').value) || 0;
+      var c = parseFloat(byId('vf-food-c-v36').value) || 0;
+      var f = parseFloat(byId('vf-food-f-v36').value) || 0;
+      if(!food){ alert('Food name dalo.'); return; }
+      var dayBlock = document.querySelector('.vf-day-block-v36[data-day="'+day+'"] .vf-day-meals-v36');
+      if(!dayBlock){ alert('Day not found in plan.'); return; }
+      if(row){
+        row.dataset.slot = slot; row.dataset.food = food; row.dataset.cal = cal; row.dataset.p = p; row.dataset.c = c; row.dataset.f = f;
+        var foodEl = row.querySelector('.vf-meal-food-v36');
+        var macroEl = row.querySelector('.vf-meal-macro-v36');
+        var slotEl = row.querySelector('div[style*="color:#888"]');
+        if(foodEl) foodEl.textContent = food;
+        if(slotEl) slotEl.textContent = slot;
+        if(macroEl) macroEl.textContent = macroText(cal,p,c,f);
+        if(row.parentNode !== dayBlock) dayBlock.appendChild(row);
+      } else {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = rowHtml(slot, food, cal, p, c, f);
+        dayBlock.appendChild(tmp.firstChild);
+      }
+      modal.remove();
+    };
+    var del = byId('vf-food-delete-v36');
+    if(del) del.onclick = function(){ if(confirm('Delete this food?')){ row.remove(); modal.remove(); } };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+  }
+
+  document.addEventListener('click', function(e){
+    var edit = e.target.closest('.vf-meal-edit-v36');
+    if(edit){ openFoodEditor(edit.closest('.vf-meal-row-v36')); return; }
+    var del = e.target.closest('.vf-meal-delete-v36');
+    if(del){ if(confirm('Delete this food?')) del.closest('.vf-meal-row-v36').remove(); return; }
+  });
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(parsePlanner, 260);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(parsePlanner, 1200); });
+})();
+/* VITALFLOW_MEAL_EDITOR_V36_END */
+</script>
+
+<script>
+/* VITALFLOW_SAVED_PLAN_V37_START */
+(function(){
+  if(window.__vfSavedPlanV37) return;
+  window.__vfSavedPlanV37 = true;
+
+  var PLAN_KEY = 'vf_saved_diet_exercise_plan';
+  var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var SLOTS = ['Breakfast','Lunch','Snack','Dinner'];
+
+  function byId(id){ return document.getElementById(id); }
+  function esc(s){ return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function savePlan(plan){ localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); }
+  function getPlan(){ return readJSON(PLAN_KEY, null); }
+  function profile(){ try { return typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}); } catch(e){ return {}; } }
+
+  var GOALS = {
+    bulk:{label:'Bulk', offset:500, protein:[1.6,2.0], fat:[0.8,1.0], focus:'faster size gain'},
+    leanbulk:{label:'Lean Bulk', offset:250, protein:[1.8,2.1], fat:[0.8,1.0], focus:'aesthetic muscle gain'},
+    maintain:{label:'Maintain / Recomp', offset:0, protein:[1.6,2.0], fat:[0.7,1.0], focus:'stable energy and recomposition'},
+    leancut:{label:'Lean Cut', offset:-300, protein:[2.0,2.2], fat:[0.7,0.9], focus:'definition while keeping strength'},
+    lose:{label:'Cut', offset:-500, protein:[2.0,2.3], fat:[0.6,0.8], focus:'faster fat loss'}
+  };
+  var FOODS = {
+    vegan:{breakfasts:['Oats with soy milk + banana','Poha + peanuts + sprouts','Besan chilla + chutney','Dalia with plant milk','Sattu drink + toast','Upma + sprouts','Peanut butter toast + fruit'],lunches:['Rajma rice + salad','Chana rice bowl','Dal + roti + sabzi','Soya pulao + salad','Khichdi + salad','Tofu rice bowl','Chole + roti + salad'],snacks:['Sattu shake','Bhuna chana','Peanut butter toast','Makhana','Fruit + peanuts','Sprouts chaat','Dates + soy milk'],dinners:['Tofu sabzi + roti','Dal + rice + salad','Soya curry + roti','Chana soup + roti','Rajma + roti','Vegetable khichdi','Tofu stir fry + rice']},
+    veg:{breakfasts:['Oats with milk + banana','Poha + curd','Paneer paratha + curd','Besan chilla + paneer','Dalia with milk','Upma + curd','Moong dal chilla'],lunches:['Paneer rice bowl','Rajma rice + curd','Dal + roti + sabzi','Soya pulao + curd','Khichdi + curd','Chole + rice','Palak paneer + roti'],snacks:['Dahi + banana','Paneer sandwich','Sattu shake','Makhana + milk','Bhuna chana','Peanut butter toast','Lassi + fruit'],dinners:['Paneer bhurji + roti','Dal + rice + salad','Soya curry + roti','Palak paneer + roti','Rajma + roti','Vegetable khichdi + curd','Dal tadka + roti']},
+    eggetarian:{breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Egg paratha + curd','Dalia + boiled eggs','Besan chilla + eggs','Moong dal chilla + omelette'],lunches:['Egg curry + rice','Dal roti + boiled eggs','Paneer rice bowl','Rajma rice + egg','Chole + roti + egg','Soya pulao + curd','Khichdi + boiled eggs'],snacks:['Boiled eggs + fruit','Egg sandwich','Dahi + banana','Sattu shake','Milk + peanuts','Paneer toast','Makhana + tea'],dinners:['Egg bhurji + roti','Dal + rice + omelette','Paneer bhurji + roti','Egg curry + roti','Khichdi + curd + egg','Soya curry + roti','Dal tadka + boiled eggs']},
+    nonveg:{breakfasts:['Oats + boiled eggs','Poha + egg bhurji','Bread omelette + fruit','Chicken sandwich + milk','Dalia + eggs','Besan chilla + eggs','Moong dal chilla + curd'],lunches:['Chicken rice bowl','Egg curry + rice','Dal roti + chicken','Fish curry + rice','Paneer roti plate','Rajma rice + eggs','Chicken curry + roti'],snacks:['Chicken sandwich','Boiled eggs + fruit','Protein shake','Dahi + banana','Milk + peanuts','Paneer toast','Sattu shake'],dinners:['Chicken curry + roti','Fish + rice + salad','Egg bhurji + roti','Dal + chicken + rice','Paneer bhurji + roti','Khichdi + eggs','Chicken soup + roti']}
+  };
+  var EXERCISES = {
+    gym:{Chest:['Barbell bench press','Incline dumbbell press','Chest press machine','Pec deck fly','Cable fly','Weighted dips'],Back:['Lat pulldown','Seated cable row','Chest-supported row','Bent-over row','One-arm dumbbell row','Assisted pull-up'],Shoulders:['Overhead press','Dumbbell shoulder press','Lateral raise','Rear delt fly','Face pull','Machine shoulder press'],Legs:['Squat or hack squat','Leg press','Romanian deadlift','Leg extension','Hamstring curl','Standing calf raise'],Arms:['Barbell curl','Incline dumbbell curl','Hammer curl','Triceps pushdown','Overhead triceps extension','Close-grip bench press'],Core:['Cable crunch','Hanging knee raise','Ab wheel rollout','Pallof press','Reverse crunch','Plank']},
+    calisthenics:{Chest:['Push-up','Decline push-up','Diamond push-up','Archer push-up','Dips','Pseudo planche push-up'],Back:['Pull-up','Chin-up','Inverted row','Australian pull-up','Scapular pull-up','Towel row'],Shoulders:['Pike push-up','Wall handstand hold','Wall walk','Handstand push-up progression','Planche lean','Hindu push-up'],Legs:['Bodyweight squat','Bulgarian split squat','Walking lunge','Jump squat','Pistol squat progression','Glute bridge'],Arms:['Chin-up','Diamond push-up','Bench dip','Bodyweight triceps extension','Close-grip push-up','Ring/towel curl'],Core:['Hollow body hold','Plank','Side plank','Hanging knee raise','L-sit progression','Leg raise']},
+    home:{Chest:['Push-up','Deficit push-up','Floor dumbbell press','Dumbbell fly','Resistance-band press','Chair dips'],Back:['One-arm backpack row','Resistance-band row','Prone Y raise','Reverse snow angel','Towel row','Dumbbell row'],Shoulders:['Pike push-up','Dumbbell shoulder press','Lateral raise','Rear delt raise','Wall walk','Band face pull'],Legs:['Goblet squat','Split squat','Walking lunge','Romanian deadlift','Glute bridge','Calf raise'],Arms:['Dumbbell curl','Hammer curl','Band curl','Chair dip','Overhead extension','Close-grip push-up'],Core:['Plank','Dead bug','Reverse crunch','Mountain climber','Leg raise','Side plank']}
+  };
+
+  function setupDietUi(){
+    var oldWeek = byId('week-plan-section');
+    if(oldWeek) oldWeek.style.display = 'none';
+    var goal = byId('pl-goal');
+    if(goal){
+      goal.innerHTML = '<option value="leanbulk">Lean Bulk - aesthetic muscle</option><option value="bulk">Bulk - faster size gain</option><option value="maintain">Maintain / Recomp</option><option value="leancut">Lean Cut - definition</option><option value="lose">Cut - fat loss</option>';
+    }
+    if(goal && !byId('vf-diet-v37-fields')){
+      var p = profile();
+      var box = document.createElement('div');
+      box.id = 'vf-diet-v37-fields';
+      box.style.cssText = 'border-top:1px solid rgba(255,255,255,.08);margin-top:10px;padding-top:10px;';
+      box.innerHTML = '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:10px;color:#555;margin-bottom:3px;">Diet preference</div><select class="sel" id="vf-diet-pref-v37" style="margin:0;"><option value="nonveg">Non-vegetarian</option><option value="eggetarian">Eggetarian</option><option value="veg">Vegetarian</option><option value="vegan">Vegan</option></select></div><div><div style="font-size:10px;color:#555;margin-bottom:3px;">Meal style</div><select class="sel" id="vf-meal-style-v37" style="margin:0;"><option value="home">Indian home food</option><option value="budget">Budget plan</option><option value="hostel">Hostel/simple food</option><option value="highprotein">High-protein plan</option><option value="nocook">No-cooking plan</option></select></div></div>';
+      goal.parentNode.insertBefore(box, goal.nextSibling);
+      if(p.diet && byId('vf-diet-pref-v37')) byId('vf-diet-pref-v37').value = p.diet;
+    }
+  }
+
+  function selectedFocus(){
+    var chips = byId('vf-focus-chips-v22');
+    if(!chips) return ['Chest','Back','Shoulders'];
+    var arr = Array.prototype.slice.call(chips.querySelectorAll('button')).filter(function(b){ return b.dataset.active === '1'; }).map(function(b){ return b.dataset.value; });
+    return arr.length ? arr : ['Chest','Back','Shoulders'];
+  }
+  function adjustMeal(meal, goal, style, slot){
+    if(goal === 'bulk'){ if(slot === 'Snack') meal += ' + banana/milk'; if(slot === 'Lunch') meal += ' + curd'; }
+    if(goal === 'leanbulk' && slot === 'Snack') meal += ' + fruit';
+    if(goal === 'lose' || goal === 'leancut'){ if(slot === 'Dinner') meal += ' + salad'; meal = meal.replace('paratha','roti').replace('pulao','rice bowl'); }
+    if(style === 'budget') meal = meal.replace('paneer','dal/soya').replace('chicken','eggs/dal').replace('fish','eggs');
+    if(style === 'hostel'){ if(slot === 'Breakfast') meal = 'Milk/curd + banana + oats/poha'; if(slot === 'Snack') meal = 'Bhuna chana + fruit'; }
+    if(style === 'nocook'){ if(slot === 'Breakfast') meal = 'Oats/milk + fruit + nuts'; if(slot === 'Lunch') meal = 'Curd/rice bowl + ready protein option'; if(slot === 'Snack') meal = 'Fruit + peanuts/chana'; if(slot === 'Dinner') meal = 'Simple roti/rice + ready dal/curd'; }
+    if(style === 'highprotein') meal += ' + extra protein serving';
+    return meal;
+  }
+  function buildMeals(goal, diet, style){
+    var f = FOODS[diet] || FOODS.nonveg;
+    return DAYS.map(function(day, i){
+      return {day:day, benefit:['Training fuel','Protein recovery','Fiber support','Performance carbs','Simple consistency','Micronutrient variety','Flexible day'][i], meals:[
+        {slot:'Breakfast', food:adjustMeal(f.breakfasts[i%f.breakfasts.length], goal, style, 'Breakfast'), cal:0,p:0,c:0,f:0},
+        {slot:'Lunch', food:adjustMeal(f.lunches[i%f.lunches.length], goal, style, 'Lunch'), cal:0,p:0,c:0,f:0},
+        {slot:'Snack', food:adjustMeal(f.snacks[i%f.snacks.length], goal, style, 'Snack'), cal:0,p:0,c:0,f:0},
+        {slot:'Dinner', food:adjustMeal(f.dinners[i%f.dinners.length], goal, style, 'Dinner'), cal:0,p:0,c:0,f:0}
+      ]};
+    });
+  }
+  function buildExercises(type, focus){
+    var lib = type === 'mixed' ? EXERCISES.gym : (EXERCISES[type] || EXERCISES.gym);
+    var alt = type === 'mixed' ? EXERCISES.calisthenics : null;
+    return focus.map(function(m){
+      var list = (lib[m] || EXERCISES.gym[m] || []).slice(0,6);
+      if(alt && alt[m]) list = list.slice(0,3).concat(alt[m].slice(0,3));
+      return {muscle:m, exercises:list.map(function(x){ return {name:x, note:''}; })};
+    });
+  }
+  function card(title, body, color){ return '<div class="plan-meal-card" style="border-color:'+color+'44;background:linear-gradient(135deg,'+color+'10,rgba(255,255,255,.03));"><div class="plan-meal-time" style="color:'+color+';">'+title+'</div>'+body+'</div>'; }
+  function macroText(m){ return (m.cal||0)+' kcal Â· '+(m.p||0)+'g P Â· '+(m.c||0)+'g C Â· '+(m.f||0)+'g F'; }
+
+  function renderSavedPlan(plan){
+    if(!plan || !byId('plan-meals-list')) return;
+    window.planCalResult = plan.targets.calories;
+    window.__vfPlanCalResultV24 = plan.targets.calories;
+    if(byId('bmi-result')) byId('bmi-result').style.display = 'block';
+    if(byId('bmi-val')) byId('bmi-val').textContent = plan.bmi.value;
+    if(byId('bmi-badge-wrap')) byId('bmi-badge-wrap').innerHTML = '<span class="bmi-badge" style="background:'+plan.bmi.color+'22;color:'+plan.bmi.color+';border:1px solid '+plan.bmi.color+'44;">'+plan.bmi.label+'</span>';
+    if(byId('bmi-desc')) byId('bmi-desc').textContent = plan.guidance;
+    if(byId('plan-cal')) byId('plan-cal').textContent = plan.targets.calories;
+    if(byId('plan-protein')) byId('plan-protein').textContent = plan.targets.protein+'g';
+    if(byId('plan-carbs')) byId('plan-carbs').textContent = plan.targets.carbs+'g';
+    if(byId('plan-fats')) byId('plan-fats').textContent = plan.targets.fats+'g';
+    if(byId('plan-heading')) byId('plan-heading').textContent = plan.goalLabel+' saved diet + training plan';
+    var html = '';
+    html += card('Best path','<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+plan.goalLabel+' at '+plan.targets.calories+' kcal/day</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">'+esc(plan.guidance)+'</div>','#00e5a0');
+    html += card('Macro target','<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;"><div style="text-align:center;"><b style="color:#00e5a0;">'+plan.targets.protein+'g</b><div style="font-size:10px;color:#777;">Protein</div></div><div style="text-align:center;"><b style="color:#29b6f6;">'+plan.targets.carbs+'g</b><div style="font-size:10px;color:#777;">Carbs</div></div><div style="text-align:center;"><b style="color:#ffa726;">'+plan.targets.fats+'g</b><div style="font-size:10px;color:#777;">Fats</div></div></div>','#29b6f6');
+    html += card('7-day meal planner','<div id="vf-meal-planner-v37" style="display:grid;gap:10px;margin-top:8px;">'+plan.days.map(renderDay).join('')+'</div>','#a78bfa');
+    html += '<button id="vf-global-add-food-v37" type="button" style="width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;margin:8px 0;">+ Add Food</button>';
+    html += card('Training structure','<div style="font-size:13px;color:#e0e0e0;font-weight:700;">'+esc(plan.training.split)+'</div><div style="font-size:11px;color:#aaa;line-height:1.55;margin-top:5px;">'+esc(plan.training.volume)+'</div>','#ff9f1c');
+    html += '<button id="vf-global-add-exercise-v37" type="button" style="width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;margin:8px 0;">+ Add Exercise</button>';
+    plan.training.groups.forEach(function(g){ html += card(g.muscle+' exercises','<div class="vf-ex-list-v37" data-muscle="'+esc(g.muscle)+'" style="display:grid;gap:7px;margin-top:8px;">'+g.exercises.map(function(ex){ return renderExerciseRow(g.muscle, ex); }).join('')+'</div>','#00b4d8'); });
+    byId('plan-meals-list').innerHTML = html;
+    byId('vf-global-add-food-v37').onclick = function(){ openFoodEditor(null); };
+    byId('vf-global-add-exercise-v37').onclick = function(){ openExerciseEditor(null); };
+  }
+  function renderDay(d){ return '<div class="vf-day-block-v37" data-day="'+esc(d.day)+'" style="background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:9px;"><div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:7px;"><div style="font-size:12px;font-weight:900;color:#00e5a0;">'+esc(d.day)+'</div><div style="font-size:10px;color:#a78bfa;text-align:right;">'+esc(d.benefit)+'</div></div><div class="vf-day-meals-v37">'+d.meals.map(function(m){ return renderMealRow(d.day, m); }).join('')+'</div></div>'; }
+  function renderMealRow(day, m){ return '<div class="vf-meal-row-v37" data-day="'+esc(day)+'" data-slot="'+esc(m.slot)+'" data-food="'+esc(m.food)+'" data-cal="'+(m.cal||0)+'" data-p="'+(m.p||0)+'" data-c="'+(m.c||0)+'" data-f="'+(m.f||0)+'" style="display:flex;align-items:center;gap:7px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 8px;margin-bottom:5px;"><div style="flex:1;min-width:0;"><div class="vf-meal-slot-v37" style="font-size:11px;color:#888;font-weight:800;">'+esc(m.slot)+'</div><div class="vf-meal-food-v37" style="font-size:12px;color:#e0e0e0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(m.food)+'</div><div class="vf-meal-macro-v37" style="font-size:10px;color:#666;">'+macroText(m)+'</div></div><button type="button" class="vf-meal-edit-v37" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.35);color:#00e5a0;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:800;">Edit</button><button type="button" class="vf-meal-delete-v37" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.35);color:#ff4d6d;border-radius:8px;padding:5px 8px;font-size:11px;font-weight:800;">Delete</button></div>'; }
+  function renderExerciseRow(muscle, ex){ return '<div class="vf-ex-row-v37" data-muscle="'+esc(muscle)+'" data-name="'+esc(ex.name)+'" data-note="'+esc(ex.note||'')+'" style="display:flex;align-items:center;gap:8px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 9px;"><div class="vf-ex-name-v37" style="font-size:12px;color:#e0e0e0;font-weight:800;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(ex.name)+'</div><button type="button" class="vf-ex-view-v37" style="background:rgba(0,180,216,.1);border:1px solid rgba(0,180,216,.35);color:#29b6f6;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">View</button><button type="button" class="vf-ex-edit-v37" style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.35);color:#00e5a0;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;">Edit</button></div>'; }
+
+  function syncPlanFromDom(){
+    var plan = getPlan();
+    if(!plan) return;
+    plan.days.forEach(function(d){ d.meals = []; });
+    Array.prototype.slice.call(document.querySelectorAll('.vf-meal-row-v37')).forEach(function(r){
+      var d = plan.days.find(function(x){ return x.day === r.dataset.day; });
+      if(d) d.meals.push({slot:r.dataset.slot, food:r.dataset.food, cal:+r.dataset.cal||0, p:+r.dataset.p||0, c:+r.dataset.c||0, f:+r.dataset.f||0});
+    });
+    plan.training.groups.forEach(function(g){ g.exercises = []; });
+    Array.prototype.slice.call(document.querySelectorAll('.vf-ex-row-v37')).forEach(function(r){
+      var g = plan.training.groups.find(function(x){ return x.muscle === r.dataset.muscle; });
+      if(g) g.exercises.push({name:r.dataset.name, note:r.dataset.note || ''});
+    });
+    savePlan(plan);
+  }
+
+  function buildPlan(){
+    setupDietUi();
+    var age = parseInt((byId('pl-age')||{}).value,10)||22;
+    var weight = parseFloat((byId('pl-weight')||{}).value);
+    var height = parseFloat((byId('pl-height')||{}).value);
+    var gender = byId('pl-gender') ? byId('pl-gender').value : 'male';
+    var act = parseFloat(byId('pl-activity') ? byId('pl-activity').value : '1.55') || 1.55;
+    var goalKey = byId('pl-goal') ? byId('pl-goal').value : 'leanbulk';
+    var diet = byId('vf-diet-pref-v37') ? byId('vf-diet-pref-v37').value : ((profile().diet) || 'nonveg');
+    var style = byId('vf-meal-style-v37') ? byId('vf-meal-style-v37').value : 'home';
+    var training = byId('vf-training-v22') ? byId('vf-training-v22').value : 'gym';
+    var daysCount = Math.max(1, Math.min(7, parseInt((byId('vf-train-days-v22')||{}).value,10)||4));
+    if(!weight || !height){ alert('Weight aur height dalo!'); return null; }
+    var goal = GOALS[goalKey] || GOALS.leanbulk;
+    var bmiVal = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
+    var bmr = gender === 'male' ? Math.round(10*weight + 6.25*height - 5*age + 5) : Math.round(10*weight + 6.25*height - 5*age - 161);
+    var tdee = Math.round(bmr * act);
+    var calories = Math.max(1200, tdee + goal.offset);
+    var protein = Math.round(weight * goal.protein[1]);
+    var fats = Math.round(weight * ((goal.fat[0]+goal.fat[1])/2));
+    var carbs = Math.max(80, Math.round((calories - protein*4 - fats*9)/4));
+    var bmiColor = bmiVal < 18.5 ? '#29b6f6' : bmiVal < 25 ? '#00e5a0' : bmiVal < 30 ? '#ffa726' : '#ff5252';
+    var bmiLabel = bmiVal < 18.5 ? 'Underweight' : bmiVal < 25 ? 'Healthy' : bmiVal < 30 ? 'Overweight' : 'High';
+    var guidance = 'Maintenance estimate: '+tdee+' kcal. Goal adjustment: '+(goal.offset>0?'+':'')+goal.offset+' kcal. Focus: '+goal.focus+'.';
+    var focus = selectedFocus();
+    var lib = training === 'mixed' ? EXERCISES.gym : (EXERCISES[training] || EXERCISES.gym);
+    var split = daysCount <= 3 ? 'Full body '+daysCount+' days/week' : daysCount === 4 ? 'Upper/lower or push-pull 4 days/week' : 'Push-pull-legs style '+daysCount+' days/week';
+    var volume = goalKey === 'bulk' || goalKey === 'leanbulk' ? 'Aim around 10-16 hard sets per focus muscle per week.' : goalKey === 'lose' || goalKey === 'leancut' ? 'Keep 6-12 quality sets per muscle and avoid junk volume when recovery is low.' : 'Train each major muscle 2x/week if possible.';
+    return {savedAt:new Date().toISOString(), goal:goalKey, goalLabel:goal.label, diet:diet, style:style, targets:{calories:calories, protein:protein, carbs:carbs, fats:fats}, bmi:{value:bmiVal, color:bmiColor, label:bmiLabel}, guidance:guidance, days:buildMeals(goalKey,diet,style), training:{type:training, split:split, volume:volume, groups:buildExercises(training,focus)}};
+  }
+
+  window.generatePlan = function(){
+    var plan = buildPlan();
+    if(!plan) return;
+    savePlan(plan);
+    renderSavedPlan(plan);
+    if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'});
+  };
+
+  function openFoodEditor(row){
+    var plan = getPlan(); if(!plan) return;
+    var old = byId('vf-food-modal-v37'); if(old) old.remove();
+    var modal = document.createElement('div');
+    modal.id = 'vf-food-modal-v37';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    var curDay = row ? row.dataset.day : DAYS[0], curSlot = row ? row.dataset.slot : 'Breakfast';
+    modal.innerHTML = '<div style="width:100%;max-height:88vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+(row?'Edit Food':'Add Food')+'</div><button id="vf-food-close-v37" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Day</div><select id="vf-food-day-v37" class="sel" style="margin:0;">'+DAYS.map(function(d){return '<option '+(d===curDay?'selected':'')+'>'+d+'</option>';}).join('')+'</select></div><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Timing</div><select id="vf-food-slot-v37" class="sel" style="margin:0;">'+SLOTS.map(function(s){return '<option '+(s===curSlot?'selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div><div style="font-size:10px;color:#666;margin-bottom:4px;">Food name</div><input id="vf-food-name-v37" class="inp" value="'+esc(row?row.dataset.food:'')+'" placeholder="Food name"><div class="grid2" style="margin-bottom:7px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Calories</div><input id="vf-food-cal-v37" class="inp" type="number" value="'+esc(row?row.dataset.cal:'')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Protein</div><input id="vf-food-p-v37" class="inp" type="number" value="'+esc(row?row.dataset.p:'')+'" style="margin:0;"></div></div><div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Carbs</div><input id="vf-food-c-v37" class="inp" type="number" value="'+esc(row?row.dataset.c:'')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Fats</div><input id="vf-food-f-v37" class="inp" type="number" value="'+esc(row?row.dataset.f:'')+'" style="margin:0;"></div></div><button id="vf-food-save-v37" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save Food</button></div>';
+    document.body.appendChild(modal);
+    byId('vf-food-close-v37').onclick = function(){ modal.remove(); };
+    byId('vf-food-save-v37').onclick = function(){
+      if(row) row.remove();
+      var day = byId('vf-food-day-v37').value, slot = byId('vf-food-slot-v37').value, food = byId('vf-food-name-v37').value.trim();
+      if(!food){ alert('Food name dalo.'); return; }
+      var d = document.querySelector('.vf-day-block-v37[data-day="'+day+'"] .vf-day-meals-v37');
+      var tmp = document.createElement('div');
+      tmp.innerHTML = renderMealRow(day,{slot:slot,food:food,cal:+byId('vf-food-cal-v37').value||0,p:+byId('vf-food-p-v37').value||0,c:+byId('vf-food-c-v37').value||0,f:+byId('vf-food-f-v37').value||0});
+      d.appendChild(tmp.firstChild); syncPlanFromDom(); modal.remove();
+    };
+  }
+  function openExerciseEditor(row){
+    var plan = getPlan(); if(!plan) return;
+    var old = byId('vf-ex-modal-v37'); if(old) old.remove();
+    var cats = ['Chest','Back','Shoulders','Legs','Arms','Core'];
+    var cur = row ? row.dataset.muscle : cats[0];
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v37';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+(row?'Edit Exercise':'Add Exercise')+'</div><button id="vf-ex-close-v37" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div style="font-size:10px;color:#666;margin-bottom:4px;">Category</div><select id="vf-ex-cat-v37" class="sel">'+cats.map(function(c){return '<option value="'+c+'" '+(c===cur?'selected':'')+'>'+c+'</option>';}).join('')+'</select><div style="font-size:10px;color:#666;margin-bottom:4px;">Exercise name</div><input id="vf-ex-name-v37" class="inp" value="'+esc(row?row.dataset.name:'')+'" placeholder="Exercise name"><div style="font-size:10px;color:#666;margin-bottom:4px;">Notes</div><textarea id="vf-ex-note-v37" class="inp" style="height:110px;resize:none;">'+esc(row?row.dataset.note:'')+'</textarea><button id="vf-ex-save-v37" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save</button>'+(row?'<button id="vf-ex-delete-v37" style="width:100%;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;margin-top:8px;">Delete Exercise</button>':'')+'</div>';
+    document.body.appendChild(modal);
+    byId('vf-ex-close-v37').onclick = function(){ modal.remove(); };
+    byId('vf-ex-save-v37').onclick = function(){
+      if(row) row.remove();
+      var cat = byId('vf-ex-cat-v37').value, name = byId('vf-ex-name-v37').value.trim(), note = byId('vf-ex-note-v37').value.trim();
+      if(!name){ alert('Exercise name dalo.'); return; }
+      var list = document.querySelector('.vf-ex-list-v37[data-muscle="'+cat+'"]');
+      if(!list){ alert('Category not in this plan.'); return; }
+      var tmp = document.createElement('div'); tmp.innerHTML = renderExerciseRow(cat,{name:name,note:note}); list.appendChild(tmp.firstChild); syncPlanFromDom(); modal.remove();
+    };
+    var del = byId('vf-ex-delete-v37'); if(del) del.onclick = function(){ if(confirm('Delete this exercise?')){ row.remove(); syncPlanFromDom(); modal.remove(); } };
+  }
+  function viewExercise(row){
+    var old = byId('vf-ex-modal-v37'); if(old) old.remove();
+    var modal = document.createElement('div');
+    modal.id = 'vf-ex-modal-v37';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:70vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+esc(row.dataset.name)+'</div><button id="vf-ex-close-v37" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;font-size:13px;color:#d0d0dc;line-height:1.6;white-space:pre-wrap;">'+esc(row.dataset.note || 'No notes added yet.')+'</div></div>';
+    document.body.appendChild(modal); byId('vf-ex-close-v37').onclick = function(){ modal.remove(); };
+  }
+
+  document.addEventListener('click', function(e){
+    var addFood = e.target.closest('#vf-global-add-food-v37'); if(addFood){ openFoodEditor(null); return; }
+    var editFood = e.target.closest('.vf-meal-edit-v37'); if(editFood){ openFoodEditor(editFood.closest('.vf-meal-row-v37')); return; }
+    var delFood = e.target.closest('.vf-meal-delete-v37'); if(delFood){ if(confirm('Delete this food?')){ delFood.closest('.vf-meal-row-v37').remove(); syncPlanFromDom(); } return; }
+    var addEx = e.target.closest('#vf-global-add-exercise-v37'); if(addEx){ openExerciseEditor(null); return; }
+    var viewEx = e.target.closest('.vf-ex-view-v37'); if(viewEx){ viewExercise(viewEx.closest('.vf-ex-row-v37')); return; }
+    var editEx = e.target.closest('.vf-ex-edit-v37'); if(editEx){ openExerciseEditor(editEx.closest('.vf-ex-row-v37')); return; }
+  });
+
+  function openSavedPlan(){
+    setupDietUi();
+    var plan = getPlan();
+    if(!plan){ alert('No saved plan yet. Generate a Diet Coach plan first.'); return; }
+    if(typeof showScreen === 'function') showScreen('planner', null);
+    renderSavedPlan(plan);
+    setTimeout(function(){ if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'}); }, 100);
+  }
+  window.vfOpenSavedDietPlanV37 = openSavedPlan;
+  function addMoreCard(){
+    var more = byId('screen-more'); if(!more || byId('vf-saved-plan-card-v37')) return;
+    var card = document.createElement('div'); card.className = 'card'; card.id = 'vf-saved-plan-card-v37';
+    card.innerHTML = '<div class="card-title" style="margin-bottom:6px;color:#00e5a0;">Saved Diet & Exercise Plan</div><div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:10px;">Open your last generated plan with meal and exercise edits.</div><button onclick="vfOpenSavedDietPlanV37()" style="width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;">View Saved Plan</button>';
+    var ref = more.querySelector('.card'); if(ref) more.insertBefore(card, ref); else more.appendChild(card);
+  }
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){ if(typeof oldRenderMore === 'function') oldRenderMore(); setTimeout(addMoreCard,0); };
+
+  document.addEventListener('DOMContentLoaded', function(){ setupDietUi(); addMoreCard(); });
+  setTimeout(function(){ setupDietUi(); addMoreCard(); }, 500);
+})();
+/* VITALFLOW_SAVED_PLAN_V37_END */
+</script>
+
+<script>
+/* VITALFLOW_MEAL_CONTROLS_V38_START */
+(function(){
+  if(window.__vfMealControlsV38) return;
+  window.__vfMealControlsV38 = true;
+
+  var PLAN_KEY = 'vf_saved_diet_exercise_plan';
+  var DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var SLOTS = ['Breakfast','Lunch','Snack','Dinner'];
+
+  function byId(id){ return document.getElementById(id); }
+  function esc(s){ return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function getPlan(){ return readJSON(PLAN_KEY, null); }
+  function savePlan(plan){ localStorage.setItem(PLAN_KEY, JSON.stringify(plan)); }
+  function macroText(m){ return (m.cal||0)+' kcal Â· '+(m.p||0)+'g P Â· '+(m.c||0)+'g C Â· '+(m.f||0)+'g F'; }
+
+  function cleanupDuplicateFields(){
+    var old = byId('vf-diet-v33-fields');
+    var newer = byId('vf-diet-v37-fields');
+    if(old && newer) old.style.display = 'none';
+  }
+
+  function mealPlannerCard(){
+    return Array.prototype.slice.call(document.querySelectorAll('.plan-meal-card')).find(function(card){
+      var title = card.querySelector('.plan-meal-time');
+      return title && title.textContent.indexOf('7-day meal planner') >= 0;
+    });
+  }
+
+  function tidyMealControls(){
+    cleanupDuplicateFields();
+    var card = mealPlannerCard();
+    if(!card) return;
+
+    Array.prototype.slice.call(document.querySelectorAll('.vf-meal-edit-v37,.vf-meal-delete-v37,.vf-meal-edit-v36,.vf-meal-delete-v36')).forEach(function(btn){
+      btn.style.display = 'none';
+    });
+    Array.prototype.slice.call(document.querySelectorAll('.vf-meal-row-v37,.vf-meal-row-v36')).forEach(function(row){
+      row.style.gridTemplateColumns = '1fr';
+    });
+
+    if(!byId('vf-meal-global-controls-v38')){
+      var controls = document.createElement('div');
+      controls.id = 'vf-meal-global-controls-v38';
+      controls.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0;';
+      controls.innerHTML =
+        '<button type="button" id="vf-add-food-v38" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;">+ Add Food</button>' +
+        '<button type="button" id="vf-edit-food-v38" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;">Edit / Delete Food</button>';
+      card.parentNode.insertBefore(controls, card);
+      byId('vf-add-food-v38').onclick = function(){ openFoodModal(null); };
+      byId('vf-edit-food-v38').onclick = function(){ openPickEditModal(); };
+    }
+
+    var oldAdd = byId('vf-global-add-food-v37') || byId('vf-global-add-food-v36');
+    if(oldAdd) oldAdd.style.display = 'none';
+  }
+
+  function saveRowsToPlan(){
+    var plan = getPlan();
+    if(!plan) return;
+    plan.days.forEach(function(d){ d.meals = []; });
+    Array.prototype.slice.call(document.querySelectorAll('.vf-meal-row-v37,.vf-meal-row-v36')).forEach(function(r){
+      var day = r.dataset.day || (r.closest('.vf-day-block-v37,.vf-day-block-v36') || {}).dataset.day;
+      var target = plan.days.find(function(d){ return d.day === day; });
+      if(target){
+        target.meals.push({
+          slot:r.dataset.slot || 'Breakfast',
+          food:r.dataset.food || '',
+          cal:+r.dataset.cal || 0,
+          p:+r.dataset.p || 0,
+          c:+r.dataset.c || 0,
+          f:+r.dataset.f || 0
+        });
+      }
+    });
+    savePlan(plan);
+  }
+
+  function rowHtml(day, m){
+    return '<div class="vf-meal-row-v37" data-day="'+esc(day)+'" data-slot="'+esc(m.slot)+'" data-food="'+esc(m.food)+'" data-cal="'+(m.cal||0)+'" data-p="'+(m.p||0)+'" data-c="'+(m.c||0)+'" data-f="'+(m.f||0)+'" style="display:flex;align-items:center;gap:7px;justify-content:space-between;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:7px 8px;margin-bottom:5px;">' +
+      '<div style="flex:1;min-width:0;"><div class="vf-meal-slot-v37" style="font-size:11px;color:#888;font-weight:800;">'+esc(m.slot)+'</div><div class="vf-meal-food-v37" style="font-size:12px;color:#e0e0e0;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(m.food)+'</div><div class="vf-meal-macro-v37" style="font-size:10px;color:#666;">'+macroText(m)+'</div></div>' +
+      '<button type="button" class="vf-meal-edit-v37" style="display:none;">Edit</button><button type="button" class="vf-meal-delete-v37" style="display:none;">Delete</button></div>';
+  }
+
+  function rowsFor(day, slot){
+    return Array.prototype.slice.call(document.querySelectorAll('.vf-meal-row-v37,.vf-meal-row-v36')).filter(function(r){
+      var rDay = r.dataset.day || (r.closest('.vf-day-block-v37,.vf-day-block-v36') || {}).dataset.day;
+      return rDay === day && r.dataset.slot === slot;
+    });
+  }
+
+  function openPickEditModal(){
+    var old = byId('vf-food-modal-v38');
+    if(old) old.remove();
+    var modal = shell('Edit / Delete Food');
+    modal.querySelector('.vf-modal-body-v38').innerHTML =
+      '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Day</div><select id="vf-food-day-v38" class="sel" style="margin:0;">'+DAYS.map(function(d){return '<option>'+d+'</option>';}).join('')+'</select></div><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Timing</div><select id="vf-food-slot-v38" class="sel" style="margin:0;">'+SLOTS.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select></div></div>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Food item</div><select id="vf-food-item-v38" class="sel"></select>' +
+      '<div id="vf-food-empty-v38" style="font-size:11px;color:#888;line-height:1.5;margin-bottom:8px;"></div>' +
+      '<button id="vf-food-edit-open-v38" style="width:100%;background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;">Edit Selected Food</button>';
+    document.body.appendChild(modal);
+    function refresh(){
+      var day = byId('vf-food-day-v38').value;
+      var slot = byId('vf-food-slot-v38').value;
+      var rows = rowsFor(day, slot);
+      var sel = byId('vf-food-item-v38');
+      sel.innerHTML = rows.map(function(r, i){ return '<option value="'+i+'">'+esc(r.dataset.food || 'Food')+'</option>'; }).join('');
+      byId('vf-food-empty-v38').textContent = rows.length ? '' : 'No food found for this day and timing.';
+      byId('vf-food-edit-open-v38').disabled = !rows.length;
+      byId('vf-food-edit-open-v38').style.opacity = rows.length ? '1' : '.45';
+    }
+    byId('vf-food-day-v38').onchange = refresh;
+    byId('vf-food-slot-v38').onchange = refresh;
+    byId('vf-food-edit-open-v38').onclick = function(){
+      var r = rowsFor(byId('vf-food-day-v38').value, byId('vf-food-slot-v38').value)[parseInt(byId('vf-food-item-v38').value,10)||0];
+      modal.remove();
+      if(r) openFoodModal(r);
+    };
+    refresh();
+  }
+
+  function openFoodModal(row){
+    var old = byId('vf-food-modal-v38');
+    if(old) old.remove();
+    var modal = shell(row ? 'Edit Food' : 'Add Food');
+    var curDay = row ? (row.dataset.day || (row.closest('.vf-day-block-v37,.vf-day-block-v36') || {}).dataset.day) : DAYS[0];
+    var curSlot = row ? row.dataset.slot : 'Breakfast';
+    modal.querySelector('.vf-modal-body-v38').innerHTML =
+      '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Day</div><select id="vf-food-day-v38" class="sel" style="margin:0;">'+DAYS.map(function(d){return '<option '+(d===curDay?'selected':'')+'>'+d+'</option>';}).join('')+'</select></div><div><div style="font-size:10px;color:#666;margin-bottom:4px;">Timing</div><select id="vf-food-slot-v38" class="sel" style="margin:0;">'+SLOTS.map(function(s){return '<option '+(s===curSlot?'selected':'')+'>'+s+'</option>';}).join('')+'</select></div></div>' +
+      '<div style="font-size:10px;color:#666;margin-bottom:4px;">Food name</div><input id="vf-food-name-v38" class="inp" value="'+esc(row?row.dataset.food:'')+'" placeholder="Food name">' +
+      '<div class="grid2" style="margin-bottom:7px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Calories</div><input id="vf-food-cal-v38" class="inp" type="number" value="'+esc(row?row.dataset.cal:'')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Protein</div><input id="vf-food-p-v38" class="inp" type="number" value="'+esc(row?row.dataset.p:'')+'" style="margin:0;"></div></div>' +
+      '<div class="grid2" style="margin-bottom:8px;"><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Carbs</div><input id="vf-food-c-v38" class="inp" type="number" value="'+esc(row?row.dataset.c:'')+'" style="margin:0;"></div><div><div style="font-size:9px;color:#666;margin-bottom:2px;">Fats</div><input id="vf-food-f-v38" class="inp" type="number" value="'+esc(row?row.dataset.f:'')+'" style="margin:0;"></div></div>' +
+      '<button id="vf-food-save-v38" style="width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:inherit;">Save Food</button>' +
+      (row ? '<button id="vf-food-delete-v38" style="width:100%;background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;margin-top:8px;">Delete Food</button>' : '');
+    document.body.appendChild(modal);
+    byId('vf-food-save-v38').onclick = function(){
+      var day = byId('vf-food-day-v38').value;
+      var food = byId('vf-food-name-v38').value.trim();
+      if(!food){ alert('Food name dalo.'); return; }
+      var meal = {slot:byId('vf-food-slot-v38').value, food:food, cal:+byId('vf-food-cal-v38').value||0, p:+byId('vf-food-p-v38').value||0, c:+byId('vf-food-c-v38').value||0, f:+byId('vf-food-f-v38').value||0};
+      if(row) row.remove();
+      var block = document.querySelector('.vf-day-block-v37[data-day="'+day+'"] .vf-day-meals-v37') || document.querySelector('.vf-day-block-v36[data-day="'+day+'"] .vf-day-meals-v36');
+      if(block){
+        var tmp = document.createElement('div'); tmp.innerHTML = rowHtml(day, meal); block.appendChild(tmp.firstChild);
+      }
+      saveRowsToPlan();
+      modal.remove();
+    };
+    var del = byId('vf-food-delete-v38');
+    if(del) del.onclick = function(){ if(confirm('Delete this food?')){ row.remove(); saveRowsToPlan(); modal.remove(); } };
+  }
+
+  function shell(title){
+    var modal = document.createElement('div');
+    modal.id = 'vf-food-modal-v38';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:88vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:800;">'+esc(title)+'</div><button class="vf-close-v38" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div class="vf-modal-body-v38"></div></div>';
+    modal.querySelector('.vf-close-v38').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+    return modal;
+  }
+
+  var oldGenerate = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGenerate === 'function') oldGenerate();
+    setTimeout(tidyMealControls, 300);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(tidyMealControls, 1200); });
+})();
+/* VITALFLOW_MEAL_CONTROLS_V38_END */
+</script>
+
+<script>
+/* VITALFLOW_SAVED_PLAN_LIBRARY_V39_START */
+(function(){
+  if(window.__vfSavedPlanLibraryV39) return;
+  window.__vfSavedPlanLibraryV39 = true;
+
+  var DRAFT_KEY = 'vf_current_diet_exercise_draft_v39';
+  var OLD_DRAFT_KEY = 'vf_saved_diet_exercise_plan';
+  var LIB_KEY = 'vf_saved_plan_library_v39';
+
+  function byId(id){ return document.getElementById(id); }
+  function esc(s){ return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+  function getDraft(){ return readJSON(DRAFT_KEY, null) || readJSON(OLD_DRAFT_KEY, null); }
+  function setDraft(plan){ if(plan) writeJSON(DRAFT_KEY, plan); }
+  function library(){ return readJSON(LIB_KEY, []); }
+  function saveLibrary(list){ writeJSON(LIB_KEY, list); }
+
+  function summarizePlan(plan){
+    if(!plan) return 'No details';
+    var bits = [];
+    if(plan.goalLabel) bits.push(plan.goalLabel);
+    if(plan.training && plan.training.type) bits.push(plan.training.type);
+    if(plan.diet) bits.push(plan.diet);
+    if(plan.targets && plan.targets.calories) bits.push(plan.targets.calories + ' kcal');
+    return bits.join(' Â· ');
+  }
+
+  function addSaveDraftButton(){
+    var list = byId('plan-meals-list');
+    if(!list || byId('vf-save-draft-plan-v39')) return;
+    var btn = document.createElement('button');
+    btn.id = 'vf-save-draft-plan-v39';
+    btn.type = 'button';
+    btn.textContent = 'Save This Plan';
+    btn.style.cssText = 'width:100%;background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:900;font-family:inherit;margin:10px 0;';
+    btn.onclick = saveCurrentDraftAsPlan;
+    list.parentNode.insertBefore(btn, list);
+
+    var hint = document.createElement('div');
+    hint.id = 'vf-save-draft-hint-v39';
+    hint.style.cssText = 'font-size:10px;color:#666;line-height:1.45;margin:-4px 0 8px;';
+    hint.textContent = 'This saves a separate plan in More. Generating a new Diet Coach plan will not overwrite saved plans.';
+    btn.parentNode.insertBefore(hint, list);
+  }
+
+  function saveCurrentDraftAsPlan(){
+    var plan = getDraft();
+    if(!plan){ alert('Generate a Diet Coach plan first.'); return; }
+    var defaultName = (plan.goalLabel || 'Diet') + ' - ' + ((plan.training && plan.training.type) || 'training');
+    var name = prompt('Name this saved plan:', defaultName);
+    if(!name) return;
+    var list = library();
+    var item = JSON.parse(JSON.stringify(plan));
+    item.id = 'plan_' + Date.now();
+    item.name = name.trim();
+    item.savedAt = new Date().toISOString();
+    list.unshift(item);
+    saveLibrary(list);
+    alert('Plan saved. Open it from More > Saved Diet & Exercise Plans.');
+  }
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(function(){
+      var generated = readJSON(OLD_DRAFT_KEY, null);
+      if(generated) setDraft(generated);
+      addSaveDraftButton();
+    }, 350);
+  };
+
+  function renderLibraryCard(){
+    var more = byId('screen-more');
+    if(!more) return;
+    var oldSingle = byId('vf-saved-plan-card-v37');
+    if(oldSingle) oldSingle.style.display = 'none';
+    var existing = byId('vf-saved-plan-library-card-v39');
+    if(existing) return;
+
+    var card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'vf-saved-plan-library-card-v39';
+    card.innerHTML =
+      '<div class="card-title" style="margin-bottom:6px;color:#00e5a0;">Saved Diet & Exercise Plans</div>' +
+      '<div style="font-size:11px;color:#888;line-height:1.5;margin-bottom:10px;">Store separate plans for gym, calisthenics, cut, bulk, or any routine.</div>' +
+      '<button onclick="vfOpenPlanLibraryV39()" style="width:100%;background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:12px;padding:11px;font-size:13px;font-weight:800;font-family:inherit;">Open Saved Plans</button>';
+    var ref = more.querySelector('.card');
+    if(ref) more.insertBefore(card, ref);
+    else more.appendChild(card);
+  }
+
+  function openLibrary(){
+    var old = byId('vf-plan-library-modal-v39');
+    if(old) old.remove();
+    var list = library();
+    var modal = modalShell('Saved Plans');
+    var body = modal.querySelector('.vf-modal-body-v39');
+    if(!list.length){
+      body.innerHTML = '<div style="font-size:13px;color:#888;line-height:1.6;padding:10px 0;">No saved plans yet. Generate a Diet Coach plan and tap Save This Plan.</div>';
+    } else {
+      body.innerHTML = list.map(function(p){
+        return '<div class="vf-plan-item-v39" data-id="'+p.id+'" style="background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px;margin-bottom:8px;">' +
+          '<div style="font-size:14px;font-weight:900;color:#f0f0f0;margin-bottom:3px;">'+esc(p.name || 'Saved Plan')+'</div>' +
+          '<div style="font-size:11px;color:#888;line-height:1.4;margin-bottom:8px;">'+esc(summarizePlan(p))+'</div>' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">' +
+            '<button class="vf-view-plan-v39" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:9px;padding:8px;font-size:12px;font-weight:800;">View</button>' +
+            '<button class="vf-delete-plan-v39" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:9px;padding:8px;font-size:12px;font-weight:800;">Delete</button>' +
+          '</div></div>';
+      }).join('');
+    }
+    document.body.appendChild(modal);
+  }
+  window.vfOpenPlanLibraryV39 = openLibrary;
+  window.vfOpenSavedDietPlanV37 = openLibrary;
+
+  function viewSavedPlan(id){
+    var plan = library().find(function(p){ return p.id === id; });
+    if(!plan) return;
+    var old = byId('vf-plan-view-modal-v39');
+    if(old) old.remove();
+    var modal = modalShell(plan.name || 'Saved Plan', 'vf-plan-view-modal-v39');
+    var body = modal.querySelector('.vf-modal-body-v39');
+    body.innerHTML = renderReadOnlyPlan(plan);
+    document.body.appendChild(modal);
+  }
+
+  function renderReadOnlyPlan(plan){
+    var html = '';
+    html += '<div style="background:rgba(0,229,160,.06);border:1px solid rgba(0,229,160,.18);border-radius:12px;padding:10px;margin-bottom:8px;"><div style="font-size:13px;font-weight:900;color:#00e5a0;margin-bottom:3px;">'+esc(summarizePlan(plan))+'</div><div style="font-size:11px;color:#aaa;line-height:1.5;">'+esc(plan.guidance || '')+'</div></div>';
+    if(plan.days && plan.days.length){
+      html += '<div style="font-size:12px;font-weight:900;color:#a78bfa;margin:12px 0 7px;">Diet Plan</div>';
+      plan.days.forEach(function(d){
+        html += '<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;margin-bottom:8px;background:rgba(255,255,255,.025);"><div style="font-size:12px;font-weight:900;color:#00e5a0;margin-bottom:6px;">'+esc(d.day)+'</div>';
+        (d.meals || []).forEach(function(m){
+          html += '<div style="font-size:11px;color:#ccc;line-height:1.45;margin-bottom:4px;"><b>'+esc(m.slot)+':</b> '+esc(m.food)+'</div>';
+        });
+        html += '</div>';
+      });
+    }
+    if(plan.training && plan.training.groups){
+      html += '<div style="font-size:12px;font-weight:900;color:#ff9f1c;margin:12px 0 7px;">Exercise Plan</div>';
+      html += '<div style="font-size:11px;color:#aaa;line-height:1.5;margin-bottom:8px;">'+esc(plan.training.split || '')+'<br>'+esc(plan.training.volume || '')+'</div>';
+      plan.training.groups.forEach(function(g){
+        html += '<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;margin-bottom:8px;background:rgba(255,255,255,.025);"><div style="font-size:12px;font-weight:900;color:#29b6f6;margin-bottom:6px;">'+esc(g.muscle)+'</div>';
+        (g.exercises || []).forEach(function(ex){
+          html += '<div style="font-size:11px;color:#ccc;line-height:1.45;margin-bottom:5px;"><b>'+esc(ex.name)+':</b> '+esc(ex.note || 'No notes')+'</div>';
+        });
+        html += '</div>';
+      });
+    }
+    return html;
+  }
+
+  function modalShell(title, id){
+    var modal = document.createElement('div');
+    modal.id = id || 'vf-plan-library-modal-v39';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:900;">'+esc(title)+'</div><button class="vf-close-v39" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div class="vf-modal-body-v39"></div></div>';
+    modal.querySelector('.vf-close-v39').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+    return modal;
+  }
+
+  document.addEventListener('click', function(e){
+    var item = e.target.closest('.vf-plan-item-v39');
+    if(!item) return;
+    if(e.target.closest('.vf-view-plan-v39')){ viewSavedPlan(item.dataset.id); return; }
+    if(e.target.closest('.vf-delete-plan-v39')){
+      if(confirm('Delete this saved plan?')){
+        saveLibrary(library().filter(function(p){ return p.id !== item.dataset.id; }));
+        item.remove();
+      }
+    }
+  });
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(renderLibraryCard, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ renderLibraryCard(); setTimeout(addSaveDraftButton, 1000); });
+  setTimeout(renderLibraryCard, 500);
+})();
+/* VITALFLOW_SAVED_PLAN_LIBRARY_V39_END */
+</script>
+
+<script>
+/* VITALFLOW_SAVED_PLAN_EDIT_V40_START */
+(function(){
+  if(window.__vfSavedPlanEditV40) return;
+  window.__vfSavedPlanEditV40 = true;
+
+  var LIB_KEY = 'vf_saved_plan_library_v39';
+  var DRAFT_KEY = 'vf_current_diet_exercise_draft_v39';
+  var EDIT_KEY = 'vf_editing_saved_plan_id_v40';
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
+  function library(){ return readJSON(LIB_KEY, []); }
+  function saveLibrary(list){ writeJSON(LIB_KEY, list); }
+  function getDraft(){ return readJSON(DRAFT_KEY, null); }
+  function setDraft(plan){ writeJSON(DRAFT_KEY, plan); }
+  function editingId(){ return localStorage.getItem(EDIT_KEY) || ''; }
+  function esc(s){ return String(s || '').replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function summarizePlan(plan){
+    if(!plan) return 'No details';
+    var bits = [];
+    if(plan.goalLabel) bits.push(plan.goalLabel);
+    if(plan.training && plan.training.type) bits.push(plan.training.type);
+    if(plan.diet) bits.push(plan.diet);
+    if(plan.targets && plan.targets.calories) bits.push(plan.targets.calories + ' kcal');
+    return bits.join(' Â· ');
+  }
+
+  function renderPlanIntoDietCoach(plan){
+    if(!plan) return;
+    setDraft(plan);
+    if(typeof showScreen === 'function') showScreen('planner', null);
+    if(typeof window.renderSavedPlan === 'function'){
+      window.renderSavedPlan(plan);
+    } else if(typeof generatePlan === 'function') {
+      // Fallback: at least open planner if render function is not exposed.
+    }
+    setTimeout(addEditingButtons, 150);
+    setTimeout(function(){ if(byId('bmi-result')) byId('bmi-result').scrollIntoView({behavior:'smooth'}); }, 250);
+  }
+
+  function captureDraftFromDom(){
+    var plan = getDraft();
+    if(!plan) return null;
+
+    if(plan.days){
+      plan.days.forEach(function(d){ d.meals = []; });
+      Array.prototype.slice.call(document.querySelectorAll('.vf-meal-row-v37,.vf-meal-row-v36')).forEach(function(r){
+        var day = r.dataset.day || (r.closest('.vf-day-block-v37,.vf-day-block-v36') || {}).dataset.day;
+        var target = plan.days.find(function(d){ return d.day === day; });
+        if(target){
+          target.meals.push({
+            slot:r.dataset.slot || 'Breakfast',
+            food:r.dataset.food || '',
+            cal:+r.dataset.cal || 0,
+            p:+r.dataset.p || 0,
+            c:+r.dataset.c || 0,
+            f:+r.dataset.f || 0
+          });
+        }
+      });
+    }
+
+    if(plan.training && plan.training.groups){
+      plan.training.groups.forEach(function(g){ g.exercises = []; });
+      Array.prototype.slice.call(document.querySelectorAll('.vf-ex-row-v37,.vf-ex-row-v35,.vf-ex-row-v32')).forEach(function(r){
+        var muscle = r.dataset.muscle || (r.closest('.plan-meal-card') && ((r.closest('.plan-meal-card').querySelector('.plan-meal-time') || {}).textContent || '').replace(' exercises','').trim());
+        var group = plan.training.groups.find(function(g){ return g.muscle === muscle; });
+        if(group){
+          group.exercises.push({name:r.dataset.name || (r.querySelector('.vf-ex-name-v37,.vf-ex-name-v35,.vf-ex-name-v32') || {}).textContent || '', note:r.dataset.note || ''});
+        }
+      });
+    }
+    setDraft(plan);
+    return plan;
+  }
+
+  function addEditingButtons(){
+    var list = byId('plan-meals-list');
+    if(!list) return;
+    var oldSave = byId('vf-save-draft-plan-v39');
+    if(oldSave) oldSave.style.display = editingId() ? 'none' : '';
+    var oldHint = byId('vf-save-draft-hint-v39');
+    if(oldHint && editingId()) oldHint.style.display = 'none';
+
+    if(byId('vf-plan-edit-actions-v40')) return;
+    var row = document.createElement('div');
+    row.id = 'vf-plan-edit-actions-v40';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0;';
+    row.innerHTML =
+      '<button type="button" id="vf-update-plan-v40" style="background:linear-gradient(135deg,#00e5a0,#00b4d8);color:#000;border:none;border-radius:12px;padding:12px;font-size:13px;font-weight:900;font-family:inherit;">Update Saved Plan</button>' +
+      '<button type="button" id="vf-save-new-plan-v40" style="background:#1a1000;border:1px solid #ff9f1c;color:#ff9f1c;border-radius:12px;padding:12px;font-size:13px;font-weight:900;font-family:inherit;">Save as New</button>';
+    list.parentNode.insertBefore(row, list);
+    byId('vf-update-plan-v40').onclick = updateSavedPlan;
+    byId('vf-save-new-plan-v40').onclick = saveAsNewPlan;
+
+    if(!editingId()){
+      byId('vf-update-plan-v40').style.display = 'none';
+    }
+  }
+
+  function updateSavedPlan(){
+    var id = editingId();
+    if(!id){ alert('No saved plan is being edited.'); return; }
+    var plan = captureDraftFromDom();
+    if(!plan){ alert('No plan loaded.'); return; }
+    var list = library();
+    var idx = list.findIndex(function(p){ return p.id === id; });
+    if(idx < 0){ alert('Saved plan not found.'); return; }
+    plan.id = id;
+    plan.name = list[idx].name || plan.name || 'Saved Plan';
+    plan.updatedAt = new Date().toISOString();
+    list[idx] = plan;
+    saveLibrary(list);
+    alert('Saved plan updated.');
+  }
+
+  function saveAsNewPlan(){
+    var plan = captureDraftFromDom();
+    if(!plan){ alert('No plan loaded.'); return; }
+    var name = prompt('Name this new saved plan:', (plan.goalLabel || 'Diet') + ' copy');
+    if(!name) return;
+    var list = library();
+    var copy = JSON.parse(JSON.stringify(plan));
+    copy.id = 'plan_' + Date.now();
+    copy.name = name.trim();
+    copy.savedAt = new Date().toISOString();
+    delete copy.updatedAt;
+    list.unshift(copy);
+    saveLibrary(list);
+    alert('Saved as new plan.');
+  }
+
+  function openLibrary(){
+    var old = byId('vf-plan-library-modal-v40') || byId('vf-plan-library-modal-v39');
+    if(old) old.remove();
+    var list = library();
+    var modal = document.createElement('div');
+    modal.id = 'vf-plan-library-modal-v40';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    modal.innerHTML = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:900;">Saved Plans</div><button class="vf-close-v40" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div><div class="vf-modal-body-v40"></div></div>';
+    var body = modal.querySelector('.vf-modal-body-v40');
+    if(!list.length){
+      body.innerHTML = '<div style="font-size:13px;color:#888;line-height:1.6;padding:10px 0;">No saved plans yet. Generate a Diet Coach plan and tap Save This Plan.</div>';
+    } else {
+      body.innerHTML = list.map(function(p){
+        return '<div class="vf-plan-item-v40" data-id="'+p.id+'" style="background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:10px;margin-bottom:8px;"><div style="font-size:14px;font-weight:900;color:#f0f0f0;margin-bottom:3px;">'+esc(p.name || 'Saved Plan')+'</div><div style="font-size:11px;color:#888;line-height:1.4;margin-bottom:8px;">'+esc(summarizePlan(p))+'</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;"><button class="vf-view-plan-v40" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:9px;padding:8px;font-size:12px;font-weight:800;">View</button><button class="vf-edit-plan-v40" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:9px;padding:8px;font-size:12px;font-weight:800;">Edit</button><button class="vf-delete-plan-v40" style="background:rgba(255,77,109,.1);border:1px solid rgba(255,77,109,.4);color:#ff4d6d;border-radius:9px;padding:8px;font-size:12px;font-weight:800;">Delete</button></div></div>';
+      }).join('');
+    }
+    document.body.appendChild(modal);
+    modal.querySelector('.vf-close-v40').onclick = function(){ modal.remove(); };
+    modal.onclick = function(e){ if(e.target === modal) modal.remove(); };
+  }
+  window.vfOpenPlanLibraryV39 = openLibrary;
+  window.vfOpenSavedDietPlanV37 = openLibrary;
+
+  function renderReadonly(plan){
+    var old = byId('vf-plan-view-modal-v40');
+    if(old) old.remove();
+    var modal = document.createElement('div');
+    modal.id = 'vf-plan-view-modal-v40';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,.68);display:flex;align-items:flex-end;justify-content:center;';
+    var html = '<div style="width:100%;max-height:86vh;overflow:auto;background:rgba(13,13,24,.98);border:1px solid rgba(255,255,255,.1);border-radius:22px 22px 0 0;padding:16px;color:#f0f0f0;font-family:inherit;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div style="font-size:16px;font-weight:900;">'+esc(plan.name || 'Saved Plan')+'</div><button class="vf-close-v40" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;">x</button></div>';
+    html += '<div style="font-size:12px;color:#00e5a0;font-weight:900;margin-bottom:8px;">'+esc(summarizePlan(plan))+'</div>';
+    (plan.days || []).forEach(function(d){ html += '<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;margin-bottom:8px;background:rgba(255,255,255,.025);"><div style="font-size:12px;font-weight:900;color:#00e5a0;margin-bottom:6px;">'+esc(d.day)+'</div>'; (d.meals || []).forEach(function(m){ html += '<div style="font-size:11px;color:#ccc;margin-bottom:4px;"><b>'+esc(m.slot)+':</b> '+esc(m.food)+'</div>'; }); html += '</div>'; });
+    if(plan.training && plan.training.groups){ plan.training.groups.forEach(function(g){ html += '<div style="border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:9px;margin-bottom:8px;background:rgba(255,255,255,.025);"><div style="font-size:12px;font-weight:900;color:#29b6f6;margin-bottom:6px;">'+esc(g.muscle)+'</div>'; (g.exercises || []).forEach(function(ex){ html += '<div style="font-size:11px;color:#ccc;margin-bottom:4px;"><b>'+esc(ex.name)+':</b> '+esc(ex.note || 'No notes')+'</div>'; }); html += '</div>'; }); }
+    html += '</div>';
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+    modal.querySelector('.vf-close-v40').onclick = function(){ modal.remove(); };
+  }
+
+  document.addEventListener('click', function(e){
+    var item = e.target.closest('.vf-plan-item-v40');
+    if(!item) return;
+    var id = item.dataset.id;
+    var plan = library().find(function(p){ return p.id === id; });
+    if(!plan) return;
+    if(e.target.closest('.vf-view-plan-v40')){ renderReadonly(plan); return; }
+    if(e.target.closest('.vf-edit-plan-v40')){
+      localStorage.setItem(EDIT_KEY, id);
+      var modal = byId('vf-plan-library-modal-v40');
+      if(modal) modal.remove();
+      renderPlanIntoDietCoach(JSON.parse(JSON.stringify(plan)));
+      return;
+    }
+    if(e.target.closest('.vf-delete-plan-v40')){
+      if(confirm('Delete this saved plan?')){
+        saveLibrary(library().filter(function(p){ return p.id !== id; }));
+        item.remove();
+      }
+    }
+  });
+
+  var oldGeneratePlan = window.generatePlan;
+  window.generatePlan = function(){
+    localStorage.removeItem(EDIT_KEY);
+    if(typeof oldGeneratePlan === 'function') oldGeneratePlan();
+    setTimeout(addEditingButtons, 400);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(addEditingButtons, 1200); });
+})();
+/* VITALFLOW_SAVED_PLAN_EDIT_V40_END */
+</script>
 </body>
 </html>
