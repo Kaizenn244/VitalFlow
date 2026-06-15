@@ -10491,5 +10491,684 @@ window.__showInstall=function(){
 })();
 /* VITALFLOW_IMAGE_BACKUP_V41_END */
 </script>
-</body>
+
+<script>
+/* VITALFLOW_RANK_RECORDS_CALENDAR_V42_START */
+(function(){
+  if(window.__vfRankRecordsCalendarV42) return;
+  window.__vfRankRecordsCalendarV42 = true;
+
+  var RANKS_V42 = [
+    {name:'Bronze',   icon:'\uD83E\uDD49', color:'#cd7f32', min:0,    max:149},
+    {name:'Silver',   icon:'\uD83E\uDD48', color:'#c0c0c0', min:150,  max:399},
+    {name:'Gold',     icon:'\uD83E\uDD47', color:'#ffd700', min:400,  max:799},
+    {name:'Ruby',     icon:'\uD83D\uDC8E', color:'#e91e63', min:800,  max:1399},
+    {name:'Diamond',  icon:'\uD83D\uDCA0', color:'#29b6f6', min:1400, max:2499},
+    {name:'Emerald',  icon:'\uD83D\uDC9A', color:'#00e5a0', min:2500, max:Infinity}
+  ];
+
+  function readJSON(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch(e){ return fallback; }
+  }
+  function state(){ return (typeof gS === 'function') ? gS() : readJSON('nf_s', {}); }
+  function habits(){ return (typeof getHabits === 'function') ? getHabits() : readJSON('vf_habits', []); }
+  function habitLogs(){ return (typeof getHabitLogs === 'function') ? getHabitLogs() : readJSON('vf_habit_logs', {}); }
+  function goal(){ return (typeof calGoal !== 'undefined') ? calGoal : (parseInt(localStorage.getItem('nf_goal') || '2500',10) || 2500); }
+  function waterGoal(){ return (typeof wGoal !== 'undefined') ? wGoal : (parseInt(localStorage.getItem('nf_wgoal') || '2000',10) || 2000); }
+  function todayKey(){ return (typeof TODAY_KEY !== 'undefined') ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function iso(d){ return d.toISOString().slice(0,10); }
+  function parseDate(k){ var p=String(k).split('-'); return new Date(Number(p[0]), Number(p[1])-1, Number(p[2])); }
+  function localKey(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+  function patchRanks(){
+    try{
+      if(typeof RANKS !== 'undefined' && Array.isArray(RANKS)){
+        RANKS.splice(0, RANKS.length);
+        RANKS_V42.forEach(function(r){ RANKS.push(r); });
+      }
+    }catch(e){}
+  }
+
+  window.getRank = function(pts){
+    patchRanks();
+    var list = (typeof RANKS !== 'undefined' && Array.isArray(RANKS)) ? RANKS : RANKS_V42;
+    return list.find(function(r){ return pts >= r.min && pts <= r.max; }) || list[0];
+  };
+
+  var oldUpdateRankBadge = window.updateRankBadge;
+  window.updateRankBadge = function(){
+    patchRanks();
+    if(typeof oldUpdateRankBadge === 'function') oldUpdateRankBadge();
+    var pts = typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0',10) || 0);
+    var rank = window.getRank(pts);
+    var badge = document.getElementById('rank-badge');
+    if(badge){
+      badge.textContent = rank.icon + ' ' + rank.name;
+      badge.style.color = rank.color;
+      badge.style.borderColor = rank.color + '55';
+    }
+  };
+
+  window.checkMonthlyRankDrop = function(){
+    var p = {};
+    try{ p = (typeof getProfile === 'function') ? getProfile() : readJSON('nf_profile', {}); }catch(e){}
+    if(!p.name) return;
+    var today = todayKey();
+    var startDate = localStorage.getItem('vf_start_date');
+    if(!startDate){ localStorage.setItem('vf_start_date', today); return; }
+    if(localStorage.getItem('vf_monthly_check') === today) return;
+    var start = parseDate(startDate);
+    var now = parseDate(today);
+    if(now.getDate() !== start.getDate()) return;
+    if(now.getFullYear() === start.getFullYear() && now.getMonth() === start.getMonth()) return;
+    localStorage.setItem('vf_monthly_check', today);
+    var pts = (parseInt(localStorage.getItem('nf_pts') || '0',10) || 0);
+    if(pts <= 0) return;
+    var penalty = Math.min(350, Math.max(75, Math.round(pts * 0.12)));
+    var next = Math.max(0, pts - penalty);
+    localStorage.setItem('nf_pts', String(next));
+    if(typeof updateRankBadge === 'function') updateRankBadge();
+    if(typeof showRankNotification === 'function'){
+      showRankNotification('Monthly Maintenance', 'Only '+penalty+' pts deducted this month. Your rank progress is protected.', '#ffa726');
+    }
+  };
+
+  function isPositiveStatus(h, status){
+    if(!status) return false;
+    if(h && h.type === 'bad') return status === 'maintained';
+    return status === 'done' || status === 'skipped';
+  }
+
+  function weekdayIndexes(h){
+    if(!h) return null;
+    var raw = h.weekdays || h.daysOfWeek || h.dayNames || h.selectedDays || h.selectedWeekdays || h.daysSelected || null;
+    if(!raw || !raw.length) return null;
+    var map = {sun:0,sunday:0,mon:1,monday:1,tue:2,tues:2,tuesday:2,wed:3,wednesday:3,thu:4,thur:4,thurs:4,thursday:4,fri:5,friday:5,sat:6,saturday:6};
+    var out = [];
+    raw.forEach(function(v){
+      if(typeof v === 'number') out.push(v);
+      else {
+        var n = map[String(v).toLowerCase()];
+        if(typeof n === 'number') out.push(n);
+      }
+    });
+    return out.length ? out : null;
+  }
+
+  function isDueOn(h, key){
+    var days = weekdayIndexes(h);
+    if(!days) return true;
+    return days.indexOf(parseDate(key).getDay()) >= 0;
+  }
+
+  function nextDueAfter(h, key){
+    var d = parseDate(key);
+    for(var i=1;i<=14;i++){
+      d.setDate(d.getDate()+1);
+      var k = localKey(d);
+      if(isDueOn(h,k)) return k;
+    }
+    return null;
+  }
+
+  window.vfBestHabitStreakAllTimeV42 = function(h){
+    var logs = habitLogs();
+    var keys = Object.keys(logs).sort();
+    var cur = 0, best = 0, prev = null;
+    keys.forEach(function(k){
+      if(!isDueOn(h,k)) return;
+      var positive = isPositiveStatus(h, (logs[k] || {})[h.id]);
+      if(positive){
+        if(prev && nextDueAfter(h, prev) !== k) cur = 0;
+        cur++;
+        best = Math.max(best, cur);
+        prev = k;
+      } else if((logs[k] || {}).hasOwnProperty(h.id)) {
+        cur = 0;
+        prev = k;
+      }
+    });
+    return best;
+  };
+
+  function dailyPointsForDate(key){
+    var s = state();
+    var d = s[key] || {};
+    var meals = d.meals || [];
+    var water = d.waterMl || 0;
+    var cal = meals.reduce(function(a,m){ return a + (Number(m.cal) || 0); }, 0);
+    var pts = 0;
+    var detail = [];
+    if(cal >= goal() * 0.9){ pts += 5; detail.push('Calories +5'); }
+    if(water >= waterGoal()){ pts += 5; detail.push('Water +5'); }
+    var logs = habitLogs()[key] || {};
+    habits().forEach(function(h){
+      var st = logs[h.id];
+      if(h.type === 'good'){
+        if(st === 'done'){ pts += Number(h.pts || 5); detail.push(h.name + ' +' + Number(h.pts || 5)); }
+        else if(st === 'skipped'){ pts -= 45; detail.push(h.name + ' pause -45'); }
+        else if(st === 'missed'){ pts -= 2; detail.push(h.name + ' missed -2'); }
+      } else {
+        if(st === 'maintained'){ pts += Number(h.pts || 5); detail.push(h.name + ' +' + Number(h.pts || 5)); }
+        else if(st === 'relapsed'){
+          var pen = h.severity === 'serious' ? 15 : h.severity === 'moderate' ? 8 : 3;
+          pts -= pen;
+          detail.push(h.name + ' relapse -' + pen);
+        }
+      }
+    });
+    return {points:pts, detail:detail, calories:cal, water:water};
+  }
+  window.vfDailyPointsForDateV42 = dailyPointsForDate;
+
+  function patchAnalyticsRecords(){
+    var box = document.getElementById('analytics-records');
+    if(!box) return;
+    var hs = habits();
+    var best = hs.length ? Math.max.apply(null, hs.map(function(h){ return window.vfBestHabitStreakAllTimeV42(h); })) : 0;
+    var currentStreak = 0;
+    var s = state();
+    var d = new Date();
+    for(var i=0;i<365;i++){
+      var k = iso(d);
+      if(s[k] && s[k].meals && s[k].meals.length) currentStreak++;
+      else if(i>0) break;
+      d.setDate(d.getDate()-1);
+    }
+    var records = [
+      {icon:'\uD83D\uDD25', label:'Current streak', val:currentStreak+' days', color:'var(--orange)'},
+      {icon:'\uD83D\uDCAA', label:'Best habit streak', val:best+' days', color:'var(--neon)'},
+      {icon:'\uD83C\uDFC6', label:'Total points', val:(typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0',10)||0))+' pts', color:'#ffd700'},
+      {icon:'\uD83D\uDCC5', label:'Days tracked', val:Object.keys(s).filter(function(k){ return s[k].meals && s[k].meals.length; }).length+' days', color:'var(--neon2)'}
+    ];
+    box.innerHTML = records.map(function(r){
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.05);"><div style="display:flex;gap:8px;align-items:center;"><span style="font-size:16px;">'+r.icon+'</span><span style="font-size:12px;color:var(--text2);">'+r.label+'</span></div><span style="font-size:13px;font-weight:700;color:'+r.color+';">'+r.val+'</span></div>';
+    }).join('');
+  }
+
+  var oldRenderAnalytics = window.renderAnalytics;
+  window.renderAnalytics = function(){
+    if(typeof oldRenderAnalytics === 'function') oldRenderAnalytics();
+    setTimeout(patchAnalyticsRecords, 0);
+  };
+
+  var oldRenderCalendar = window.renderCalendar;
+  window.renderCalendar = function(){
+    if(typeof oldRenderCalendar === 'function') oldRenderCalendar();
+    setTimeout(function(){
+      var grid = document.getElementById('cal-grid');
+      if(!grid) return;
+      var yr = calViewDate.getFullYear();
+      var mo = calViewDate.getMonth();
+      Array.prototype.slice.call(grid.querySelectorAll('.cal-day')).forEach(function(el){
+        var day = parseInt(el.childNodes[0] && el.childNodes[0].nodeValue,10);
+        if(!day) return;
+        var k = yr+'-'+String(mo+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+        var info = dailyPointsForDate(k);
+        if(info.points === 0 && !((state()[k] || {}).meals || []).length && !Object.keys((habitLogs()[k] || {})).length) return;
+        if(!el.querySelector('.vf-cal-pts-v42')){
+          var p = document.createElement('div');
+          p.className = 'vf-cal-pts-v42';
+          p.style.cssText = 'font-size:8px;margin-top:1px;color:'+(info.points >= 0 ? '#00e5a0' : '#ff4d6d')+';font-weight:800;';
+          p.textContent = (info.points > 0 ? '+' : '') + info.points;
+          el.appendChild(p);
+        }
+      });
+    },0);
+  };
+
+  var oldRenderCalDetail = window.renderCalDetail;
+  window.renderCalDetail = function(k){
+    if(typeof oldRenderCalDetail === 'function') oldRenderCalDetail(k);
+    setTimeout(function(){
+      var detail = document.getElementById('cal-detail');
+      if(!detail || detail.style.display === 'none') return;
+      if(detail.querySelector('.vf-day-points-v42')) return;
+      var info = dailyPointsForDate(k);
+      var card = detail.querySelector('.cal-day-detail');
+      if(!card) return;
+      var block = document.createElement('div');
+      block.className = 'vf-day-points-v42';
+      block.style.cssText = 'background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px 10px;margin:8px 0 10px;display:flex;justify-content:space-between;align-items:center;gap:10px;';
+      block.innerHTML = '<div><div style="font-size:11px;color:#a0a0b8;font-weight:800;">Daily points</div><div style="font-size:10px;color:#5a5a7a;line-height:1.35;">'+(info.detail.length ? info.detail.slice(0,4).join(' · ') : 'No points logged')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(info.points >= 0 ? '#00e5a0' : '#ff4d6d')+';">'+(info.points > 0 ? '+' : '')+info.points+'</div>';
+      var header = card.children[0];
+      if(header && header.nextSibling) card.insertBefore(block, header.nextSibling);
+      else card.appendChild(block);
+    },0);
+  };
+
+  function addImportWarning(){
+    var card = document.getElementById('vf-image-backup-card-v41');
+    if(card && !card.querySelector('.vf-import-warning-v42')){
+      var note = document.createElement('div');
+      note.className = 'vf-import-warning-v42';
+      note.style.cssText = 'font-size:10px;color:#ffa726;line-height:1.45;margin-top:8px;';
+      note.textContent = 'If Import does not open in an APK, the wrapper probably has broken file-picker support. Open the same GitHub Pages app in Chrome and import there, or use a TWA/PWABuilder build.';
+      card.appendChild(note);
+    }
+  }
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(function(){ addImportWarning(); patchRanks(); if(typeof updateRankBadge === 'function') updateRankBadge(); }, 0);
+  };
+
+  patchRanks();
+  if(typeof updateRankBadge === 'function') updateRankBadge();
+  setTimeout(function(){ addImportWarning(); patchAnalyticsRecords(); }, 700);
+})();
+/* VITALFLOW_RANK_RECORDS_CALENDAR_V42_END */
+</script>
+
+<script>
+/* VITALFLOW_EMOJI_TEXT_REPAIR_V44_START */
+(function(){
+  if(window.__vfEmojiTextRepairV44) return;
+  window.__vfEmojiTextRepairV44 = true;
+
+  var pairs = [
+    ['\u00E2\u0161\u00A1', '\u26A1'],
+    ['\u00E2\u0161\u2122\u00EF\u00B8\u008F', '\u2699\uFE0F'],
+    ['\u00E2\u009D\u008C', '\u274C'],
+    ['\u00E2\u009C\u0085', '\u2705'],
+    ['\u00E2\u009C\u0093', '\u2713'],
+    ['\u00E2\u0153\u201C', '\u2713'],
+    ['\u00E2\u009C\u0097', '\u2717'],
+    ['\u00E2\u0153\u2014', '\u2717'],
+    ['\u00E2\u20AC\u201D', '\u2014'],
+    ['\u00E2\u20AC\u201C', '\u2013'],
+    ['\u00E2\u2020\u2019', '\u2192'],
+    ['\u00E2\u02C6\u2019', '\u2212'],
+    ['\u00E2\u20AC\u00B9', '\u2039'],
+    ['\u00E2\u20AC\u00BA', '\u203A'],
+    ['\u00C3\u2014', '\u00D7'],
+    ['\u00C3\u201A\u00C2\u00B7', '\u00B7'],
+    ['\u00C2\u00B7', '\u00B7'],
+    ['\u00C2\u00A0', ' '],
+    ['\u00F0\u0178\u00A5\u2014', '\uD83E\uDD57'],
+    ['\u00F0\u0178\u201D\u00A5', '\uD83D\uDD25'],
+    ['\u00F0\u0178\u017D\u00AF', '\uD83C\uDFAF'],
+    ['\u00F0\u0178\u2019\u00AA', '\uD83D\uDCAA'],
+    ['\u00F0\u0178\u00A7\u201A', '\uD83E\uDDC2'],
+    ['\u00F0\u0178\u2019\u00A7', '\uD83D\uDCA7'],
+    ['\u00F0\u0178\u201C\u0160', '\uD83D\uDCCA'],
+    ['\u00F0\u0178\u201C\u02C6', '\uD83D\uDCC8'],
+    ['\u00F0\u0178\u2019\u00A1', '\uD83D\uDCA1'],
+    ['\u00F0\u0178\u008F\u2020', '\uD83C\uDFC6'],
+    ['\u00F0\u0178\u008D\u00B1', '\uD83C\uDF71'],
+    ['\u00F0\u0178\u2018\u00A4', '\uD83D\uDC64'],
+    ['\u00F0\u0178\u00A5\u2030', '\uD83E\uDD49'],
+    ['\u00F0\u0178\u00A5\u02C6', '\uD83E\uDD48'],
+    ['\u00F0\u0178\u00A5\u2021', '\uD83E\uDD47'],
+    ['\u00F0\u0178\u2019\u017D', '\uD83D\uDC8E'],
+    ['\u00F0\u0178\u2019\u00A0', '\uD83D\uDCA0'],
+    ['\u00F0\u0178\u2019\u0161', '\uD83D\uDC9A'],
+    ['\u00F0\u0178\u201C\u2026', '\uD83D\uDCC5'],
+    ['\u00F0\u0178\u00E2\u20AC\u2122\u00BD\u00EF\u00B8\u008F', '\uD83C\uDF7D\uFE0F']
+  ];
+
+  function repairString(s){
+    if(!s || typeof s !== 'string') return s;
+    var out = s;
+    pairs.forEach(function(p){ out = out.split(p[0]).join(p[1]); });
+    return out;
+  }
+
+  function repairTextNode(node){
+    var next = repairString(node.nodeValue);
+    if(next !== node.nodeValue) node.nodeValue = next;
+  }
+
+  function repairElement(el){
+    if(!el) return;
+    if(el.nodeType === 3){ repairTextNode(el); return; }
+    if(el.nodeType !== 1 && el.nodeType !== 9 && el.nodeType !== 11) return;
+    ['placeholder','title','aria-label','value'].forEach(function(attr){
+      if(el.getAttribute && el.hasAttribute && el.hasAttribute(attr)){
+        var old = el.getAttribute(attr);
+        var fixed = repairString(old);
+        if(fixed !== old) el.setAttribute(attr, fixed);
+      }
+    });
+    var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var n;
+    while((n = walker.nextNode())) repairTextNode(n);
+  }
+
+  var scheduled = false;
+  function scheduleRepair(){
+    if(scheduled) return;
+    scheduled = true;
+    setTimeout(function(){
+      scheduled = false;
+      repairElement(document.body);
+    }, 30);
+  }
+
+  document.addEventListener('DOMContentLoaded', function(){
+    repairElement(document.body);
+    var obs = new MutationObserver(scheduleRepair);
+    obs.observe(document.body, {childList:true, subtree:true, characterData:true});
+  });
+  setTimeout(function(){ if(document.body) repairElement(document.body); }, 500);
+})();
+/* VITALFLOW_EMOJI_TEXT_REPAIR_V44_END */
+</script>
+<script>
+/* VITALFLOW_IMAGE_BACKUP_V45_START */
+(function(){
+  if(window.__vfImageBackupV45) return;
+  window.__vfImageBackupV45 = true;
+
+  var PNG_SIG = [137,80,78,71,13,10,26,10];
+  var PIXEL_MAGIC = [86,70,73,77,71,49]; // VFIMG1
+  var CHUNK_TYPE = 'vfBk';
+
+  function byId(id){ return document.getElementById(id); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function todayKey(){ return (typeof TODAY_KEY !== 'undefined') ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+
+  function backupPayload(){
+    return {
+      version:'VitalFlow-v1',
+      exported:new Date().toISOString(),
+      state:typeof gS === 'function' ? gS() : readJSON('nf_s', {}),
+      customFoods:typeof getCF === 'function' ? getCF() : readJSON('nf_cf', []),
+      favorites:window.favs || readJSON('nf_favs', []),
+      habits:typeof getHabits === 'function' ? getHabits() : readJSON('vf_habits', []),
+      habitLogs:typeof getHabitLogs === 'function' ? getHabitLogs() : readJSON('vf_habit_logs', {}),
+      profile:typeof getProfile === 'function' ? getProfile() : readJSON('nf_profile', {}),
+      goals:{
+        calGoal:window.calGoal || parseInt(localStorage.getItem('nf_goal') || '2500', 10),
+        macroGoals:typeof getMacroGoals === 'function' ? getMacroGoals() : readJSON('nf_mg', {protein:150,carbs:300,fats:80}),
+        customNutrient:typeof getCustomNutrient === 'function' ? getCustomNutrient() : readJSON('nf_cn', null),
+        wGoal:window.wGoal || parseInt(localStorage.getItem('nf_wgoal') || '2000', 10),
+        wMpg:window.wMpg || parseInt(localStorage.getItem('nf_wml') || '250', 10)
+      },
+      points:typeof getPoints === 'function' ? getPoints() : (parseInt(localStorage.getItem('nf_pts') || '0', 10) || 0),
+      weights:readJSON('nf_weights', []),
+      microGoals:readJSON('vf_micro_goals', null),
+      savedPlanDraft:readJSON('vf_current_diet_exercise_draft_v39', null),
+      savedPlanLibrary:readJSON('vf_saved_plan_library_v39', [])
+    };
+  }
+
+  function saveState(s){ if(typeof sS === 'function') sS(s); else localStorage.setItem('nf_s', JSON.stringify(s)); }
+  function saveCustomFoods(a){ if(typeof setCF === 'function') setCF(a); else localStorage.setItem('nf_cf', JSON.stringify(a)); }
+  function saveHabitsSafe(a){ if(typeof saveHabits === 'function') saveHabits(a); else localStorage.setItem('vf_habits', JSON.stringify(a)); }
+  function saveHabitLogsSafe(a){ if(typeof saveHabitLogs === 'function') saveHabitLogs(a); else localStorage.setItem('vf_habit_logs', JSON.stringify(a)); }
+
+  function applyBackup(data){
+    if(!data || !data.version || String(data.version).indexOf('VitalFlow') < 0){
+      alert('Invalid VitalFlow backup.');
+      return false;
+    }
+    if(!confirm('This will replace current data on this device. Continue?')) return false;
+    if(data.state) saveState(data.state);
+    if(data.customFoods) saveCustomFoods(data.customFoods);
+    if(data.favorites){ window.favs = data.favorites; localStorage.setItem('nf_favs', JSON.stringify(data.favorites)); }
+    if(data.habits) saveHabitsSafe(data.habits);
+    if(data.habitLogs) saveHabitLogsSafe(data.habitLogs);
+    if(data.profile) localStorage.setItem('nf_profile', JSON.stringify(data.profile));
+    if(data.goals){
+      if(data.goals.calGoal){ try{ window.calGoal = data.goals.calGoal; }catch(e){} localStorage.setItem('nf_goal', data.goals.calGoal); }
+      if(data.goals.macroGoals) localStorage.setItem('nf_mg', JSON.stringify(data.goals.macroGoals));
+      if(data.goals.customNutrient) localStorage.setItem('nf_cn', JSON.stringify(data.goals.customNutrient));
+      if(data.goals.wGoal){ try{ window.wGoal = data.goals.wGoal; }catch(e){} localStorage.setItem('nf_wgoal', data.goals.wGoal); }
+      if(data.goals.wMpg){ try{ window.wMpg = data.goals.wMpg; }catch(e){} localStorage.setItem('nf_wml', data.goals.wMpg); }
+    }
+    if(typeof data.points !== 'undefined') localStorage.setItem('nf_pts', data.points);
+    if(data.weights) localStorage.setItem('nf_weights', JSON.stringify(data.weights));
+    if(data.microGoals) localStorage.setItem('vf_micro_goals', JSON.stringify(data.microGoals));
+    if(data.savedPlanDraft) localStorage.setItem('vf_current_diet_exercise_draft_v39', JSON.stringify(data.savedPlanDraft));
+    if(data.savedPlanLibrary) localStorage.setItem('vf_saved_plan_library_v39', JSON.stringify(data.savedPlanLibrary));
+    alert('Backup imported successfully. Reloading now.');
+    location.reload();
+    return true;
+  }
+
+  function encodeUtf8(text){
+    if(window.TextEncoder) return new TextEncoder().encode(text);
+    var str = unescape(encodeURIComponent(text));
+    var arr = new Uint8Array(str.length);
+    for(var i=0;i<str.length;i++) arr[i] = str.charCodeAt(i);
+    return arr;
+  }
+  function decodeUtf8(bytes){
+    if(window.TextDecoder) return new TextDecoder().decode(bytes);
+    var s = '';
+    for(var i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+    return decodeURIComponent(escape(s));
+  }
+
+  var crcTable = null;
+  function makeCrcTable(){
+    var c, table = [];
+    for(var n=0;n<256;n++){
+      c = n;
+      for(var k=0;k<8;k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  }
+  function crc32(bytes){
+    if(!crcTable) crcTable = makeCrcTable();
+    var crc = 0xffffffff;
+    for(var i=0;i<bytes.length;i++) crc = crcTable[(crc ^ bytes[i]) & 255] ^ (crc >>> 8);
+    return (crc ^ 0xffffffff) >>> 0;
+  }
+  function u32be(n){ return new Uint8Array([(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]); }
+  function typeBytes(type){ return new Uint8Array([type.charCodeAt(0),type.charCodeAt(1),type.charCodeAt(2),type.charCodeAt(3)]); }
+  function concatArrays(arrs){
+    var len = arrs.reduce(function(a,b){ return a + b.length; },0);
+    var out = new Uint8Array(len), off = 0;
+    arrs.forEach(function(a){ out.set(a, off); off += a.length; });
+    return out;
+  }
+  function makeChunk(type, data){
+    var tb = typeBytes(type);
+    var crcInput = concatArrays([tb, data]);
+    var crc = u32be(crc32(crcInput));
+    return concatArrays([u32be(data.length), tb, data, crc]);
+  }
+  function addBackupChunk(pngBytes, json){
+    var data = encodeUtf8(json);
+    var chunk = makeChunk(CHUNK_TYPE, data);
+    var pos = 8;
+    while(pos + 8 <= pngBytes.length){
+      var len = ((pngBytes[pos]<<24) | (pngBytes[pos+1]<<16) | (pngBytes[pos+2]<<8) | pngBytes[pos+3]) >>> 0;
+      var type = String.fromCharCode(pngBytes[pos+4],pngBytes[pos+5],pngBytes[pos+6],pngBytes[pos+7]);
+      if(type === 'IEND') break;
+      pos += 12 + len;
+    }
+    if(pos >= pngBytes.length) throw new Error('PNG IEND chunk not found.');
+    return concatArrays([pngBytes.slice(0,pos), chunk, pngBytes.slice(pos)]);
+  }
+  function extractBackupChunk(pngBytes){
+    for(var i=0;i<PNG_SIG.length;i++) if(pngBytes[i] !== PNG_SIG[i]) return null;
+    var pos = 8;
+    while(pos + 8 <= pngBytes.length){
+      var len = ((pngBytes[pos]<<24) | (pngBytes[pos+1]<<16) | (pngBytes[pos+2]<<8) | pngBytes[pos+3]) >>> 0;
+      var type = String.fromCharCode(pngBytes[pos+4],pngBytes[pos+5],pngBytes[pos+6],pngBytes[pos+7]);
+      var dataStart = pos + 8;
+      var dataEnd = dataStart + len;
+      if(dataEnd + 4 > pngBytes.length) return null;
+      if(type === CHUNK_TYPE){
+        return JSON.parse(decodeUtf8(pngBytes.slice(dataStart, dataEnd)));
+      }
+      if(type === 'IEND') break;
+      pos = dataEnd + 4;
+    }
+    return null;
+  }
+
+  function makeBackupCanvas(json){
+    var payload = encodeUtf8(json);
+    var header = new Uint8Array(PIXEL_MAGIC.length + 4);
+    for(var i=0;i<PIXEL_MAGIC.length;i++) header[i] = PIXEL_MAGIC[i];
+    var len = payload.length;
+    header[PIXEL_MAGIC.length] = len & 255;
+    header[PIXEL_MAGIC.length+1] = (len >> 8) & 255;
+    header[PIXEL_MAGIC.length+2] = (len >> 16) & 255;
+    header[PIXEL_MAGIC.length+3] = (len >> 24) & 255;
+    var totalBytes = header.length + payload.length;
+    var pixels = Math.ceil(totalBytes / 3);
+    var size = Math.ceil(Math.sqrt(pixels));
+    var canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(size, size);
+    var srcIndex = 0;
+    function nextByte(){
+      if(srcIndex < header.length) return header[srcIndex++];
+      var p = srcIndex - header.length;
+      srcIndex++;
+      return p < payload.length ? payload[p] : 0;
+    }
+    for(var px=0; px<size*size; px++){
+      var di = px * 4;
+      img.data[di] = nextByte();
+      img.data[di+1] = nextByte();
+      img.data[di+2] = nextByte();
+      img.data[di+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
+  }
+  function canvasToBlob(canvas){
+    return new Promise(function(resolve,reject){
+      canvas.toBlob(function(blob){ blob ? resolve(blob) : reject(new Error('Could not create PNG.')); }, 'image/png');
+    });
+  }
+  async function makeBackupBlob(){
+    var json = JSON.stringify(backupPayload());
+    var canvas = makeBackupCanvas(json);
+    var blob = await canvasToBlob(canvas);
+    var png = new Uint8Array(await blob.arrayBuffer());
+    var withChunk = addBackupChunk(png, json);
+    return new Blob([withChunk], {type:'image/png'});
+  }
+
+  function decodeCanvas(canvas){
+    var ctx = canvas.getContext('2d');
+    var img = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    var bytes = [];
+    for(var i=0; i<img.length; i+=4) bytes.push(img[i], img[i+1], img[i+2]);
+    for(var m=0;m<PIXEL_MAGIC.length;m++){
+      if(bytes[m] !== PIXEL_MAGIC[m]) throw new Error('Not a VitalFlow pixel backup.');
+    }
+    var offset = PIXEL_MAGIC.length;
+    var len = (bytes[offset]) | (bytes[offset+1] << 8) | (bytes[offset+2] << 16) | (bytes[offset+3] << 24);
+    if(!len || len < 1 || len > bytes.length) throw new Error('Backup length is invalid.');
+    var start = PIXEL_MAGIC.length + 4;
+    return JSON.parse(decodeUtf8(new Uint8Array(bytes.slice(start, start + len))));
+  }
+  function decodeViaPixels(file){
+    return new Promise(function(resolve,reject){
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        var img = new Image();
+        img.onload = function(){
+          try{
+            var canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth || img.width;
+            canvas.height = img.naturalHeight || img.height;
+            canvas.getContext('2d').drawImage(img,0,0);
+            resolve(decodeCanvas(canvas));
+          }catch(err){ reject(err); }
+        };
+        img.onerror = function(){ reject(new Error('Could not load image.')); };
+        img.src = ev.target.result;
+      };
+      reader.onerror = function(){ reject(new Error('Could not read image.')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function importImageFile(file){
+    if(!file) return;
+    try{
+      var bytes = new Uint8Array(await file.arrayBuffer());
+      var data = extractBackupChunk(bytes);
+      if(!data) data = await decodeViaPixels(file);
+      applyBackup(data);
+    }catch(err){
+      alert('Could not import this image. Please use the PNG made by Export Image, shared as a file/document. If you sent it as a photo or screenshot, create a fresh export and share the original PNG.');
+    }
+  }
+
+  async function openExport(){
+    var old = byId('vf-image-backup-panel-v45') || byId('vf-image-backup-panel-v41');
+    if(old) old.remove();
+    var panel = document.createElement('div');
+    panel.id = 'vf-image-backup-panel-v45';
+    panel.style.cssText = 'position:fixed;left:10px;right:10px;bottom:76px;z-index:999999;background:rgba(13,13,24,.98);border:1px solid rgba(0,229,160,.45);border-radius:16px;padding:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);color:#f0f0f0;font-family:inherit;';
+    panel.innerHTML = '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px;"><div><div style="font-size:14px;font-weight:800;color:#00e5a0;">Image Backup Ready</div><div style="font-size:11px;color:#a0a0b8;">Use Share PNG or Download PNG, then import the same file.</div></div><button id="vf-img-close-v45" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#fff;border-radius:999px;width:30px;height:30px;font-size:16px;">x</button></div><div id="vf-img-preview-v45" style="text-align:center;font-size:12px;color:#888;padding:18px 0;">Preparing backup...</div>';
+    document.body.appendChild(panel);
+    byId('vf-img-close-v45').onclick = function(){ panel.remove(); };
+    try{
+      var blob = await makeBackupBlob();
+      var url = URL.createObjectURL(blob);
+      byId('vf-img-preview-v45').innerHTML = '<img src="'+url+'" style="width:120px;height:120px;image-rendering:pixelated;border:1px solid rgba(255,255,255,.12);border-radius:10px;display:block;margin:0 auto 10px;background:#fff;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;"><button id="vf-img-share-v45" style="background:#001a0f;border:1px solid #00e5a0;color:#00e5a0;border-radius:10px;padding:11px;font-size:12px;font-weight:800;">Share PNG</button><button id="vf-img-download-v45" style="background:#001829;border:1px solid #29b6f6;color:#29b6f6;border-radius:10px;padding:11px;font-size:12px;font-weight:800;">Download PNG</button></div><div style="font-size:10px;color:#5a5a7a;line-height:1.45;">Best: Google Drive, Gmail, Nearby Share, or WhatsApp as document/file.</div>';
+      byId('vf-img-download-v45').onclick = function(){
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = 'VitalFlow-image-backup-' + todayKey() + '.png';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function(){ a.remove(); }, 1000);
+      };
+      byId('vf-img-share-v45').onclick = async function(){
+        try{
+          var file = new File([blob], 'VitalFlow-image-backup-' + todayKey() + '.png', {type:'image/png'});
+          if(navigator.canShare && navigator.canShare({files:[file]})){
+            await navigator.share({files:[file], title:'VitalFlow Image Backup', text:'VitalFlow backup'});
+            return;
+          }
+          if(navigator.share){
+            await navigator.share({title:'VitalFlow Image Backup', text:'Use Download PNG if file sharing is unavailable.'});
+            return;
+          }
+        }catch(e){}
+        alert('Share is not available here. Use Download PNG.');
+      };
+    }catch(err){
+      byId('vf-img-preview-v45').textContent = 'Could not prepare image backup.';
+    }
+  }
+
+  function removeYellowNote(){
+    var notes = document.querySelectorAll('.vf-import-warning-v42');
+    Array.prototype.forEach.call(notes, function(n){ n.remove(); });
+  }
+
+  function wireButtons(){
+    removeYellowNote();
+    window.vfExportImageBackupV41 = openExport;
+    var exportBtn = document.querySelector('#vf-image-backup-card-v41 button[onclick*="vfExportImageBackupV41"]');
+    if(exportBtn) exportBtn.onclick = openExport;
+    var importBtn = byId('vf-img-import-btn-v41');
+    var input = byId('vf-img-import-file-v41');
+    if(importBtn && input){
+      importBtn.onclick = function(){ input.click(); };
+      input.onchange = function(e){
+        importImageFile(e.target.files && e.target.files[0]);
+        e.target.value = '';
+      };
+    }
+  }
+
+  var oldRenderMore = window.renderMore;
+  window.renderMore = function(){
+    if(typeof oldRenderMore === 'function') oldRenderMore();
+    setTimeout(wireButtons, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', wireButtons);
+  setTimeout(wireButtons, 500);
+})();
+/* VITALFLOW_IMAGE_BACKUP_V45_END */
+</script></body>
 </html>
