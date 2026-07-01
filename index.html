@@ -11908,4 +11908,719 @@ embed[type="application/pdf"][src="about:blank"] { filter: invert(100%) contrast
   }, 1000);
 })();
 /* VITALFLOW_HABIT_MISSED_AUTOFILL_V49_END */
+</script>
+<script>
+/* VITALFLOW_WORKOUT_MUSCLE_FIX_V50_START */
+(function(){
+  if(window.__vfWorkoutMuscleFixV50) return;
+  window.__vfWorkoutMuscleFixV50 = true;
+
+  var MUSCLES = ['Full Body','Chest','Back','Legs','Shoulders','Arms','Core','Cardio'];
+
+  function byId(id){ return document.getElementById(id); }
+  function todayKey(){ return (typeof TODAY_KEY !== 'undefined') ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function saveState(s){ if(typeof sS === 'function') sS(s); else localStorage.setItem('nf_s', JSON.stringify(s)); }
+
+  function selected(){
+    return Array.prototype.slice.call(document.querySelectorAll('#vf-muscle-grid-v50 .vf-muscle-check-v50:checked')).map(function(el){ return el.value; });
+  }
+
+  function setChipStyle(btn, active){
+    btn.style.border = active ? '1px solid rgba(0,229,160,.65)' : '1px solid rgba(255,255,255,.12)';
+    btn.style.background = active ? 'linear-gradient(135deg, rgba(0,229,160,.22), rgba(0,180,216,.16))' : 'rgba(255,255,255,.045)';
+    btn.style.color = active ? '#00e5a0' : 'var(--text2)';
+    btn.style.boxShadow = active ? '0 0 12px rgba(0,229,160,.14)' : 'none';
+  }
+
+  function syncVisuals(){
+    var grid = byId('vf-muscle-grid-v50');
+    if(!grid) return;
+    Array.prototype.forEach.call(grid.querySelectorAll('.vf-muscle-chip-v50'), function(btn){
+      var input = grid.querySelector('input[value="'+btn.dataset.value+'"]');
+      setChipStyle(btn, !!(input && input.checked));
+    });
+    var vals = selected();
+    var sel = byId('wo-muscle');
+    if(sel && vals.length) sel.value = vals[0];
+  }
+
+  function buildGrid(){
+    var modal = byId('workout-modal');
+    if(!modal) return;
+    var old = byId('vf-muscle-grid-v20');
+    var grid = byId('vf-muscle-grid-v50');
+    if(!grid){
+      grid = document.createElement('div');
+      grid.id = 'vf-muscle-grid-v50';
+      grid.style.cssText = 'display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap;';
+      var sel = byId('wo-muscle');
+      if(sel){
+        sel.style.display = 'none';
+        sel.insertAdjacentElement('afterend', grid);
+      } else {
+        var type = byId('wo-type');
+        if(type) type.insertAdjacentElement('afterend', grid);
+      }
+    }
+    if(old && old !== grid) old.style.display = 'none';
+    grid.innerHTML = MUSCLES.map(function(m,i){
+      return '<input class="vf-muscle-check-v50" type="checkbox" value="'+m+'" '+(i===0?'checked':'')+' style="display:none;">' +
+        '<button type="button" class="vf-muscle-chip-v50" data-value="'+m+'" style="border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;font-family:inherit;white-space:nowrap;cursor:pointer;">'+m+'</button>';
+    }).join('');
+    grid.onclick = function(e){
+      var btn = e.target.closest('.vf-muscle-chip-v50');
+      if(!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var val = btn.dataset.value;
+      var inputs = Array.prototype.slice.call(grid.querySelectorAll('.vf-muscle-check-v50'));
+      var input = grid.querySelector('input[value="'+val+'"]');
+      if(!input) return;
+      if(val === 'Full Body'){
+        inputs.forEach(function(inp){ inp.checked = inp.value === 'Full Body'; });
+      } else {
+        var full = grid.querySelector('input[value="Full Body"]');
+        if(full) full.checked = false;
+        input.checked = !input.checked;
+        var any = inputs.some(function(inp){ return inp.checked; });
+        if(!any && full) full.checked = true;
+      }
+      syncVisuals();
+      var nameEl = byId('wo-name');
+      if(nameEl && !nameEl.value.trim()){
+        var vals = selected();
+        nameEl.placeholder = workoutName(vals, (byId('wo-type') || {}).value || 'Strength');
+      }
+    };
+    syncVisuals();
+  }
+
+  function workoutName(muscles, type){
+    if(type === 'Rest Day') return 'Rest Day';
+    if(!muscles.length) return type + ' Day';
+    if(muscles.length === 1 && muscles[0] === 'Full Body') return 'Full Body Day';
+    return muscles.join(' & ') + ' Day';
+  }
+
+  var oldOpen = window.openWorkoutModal;
+  window.openWorkoutModal = function(){
+    if(typeof oldOpen === 'function') oldOpen();
+    else {
+      var modal = byId('workout-modal');
+      if(modal) modal.classList.add('open');
+    }
+    setTimeout(buildGrid, 0);
+    setTimeout(buildGrid, 120);
+  };
+
+  var oldClose = window.closeWorkoutModal;
+  window.closeWorkoutModal = function(){
+    if(typeof oldClose === 'function') oldClose();
+    var grid = byId('vf-muscle-grid-v50');
+    if(grid){
+      Array.prototype.forEach.call(grid.querySelectorAll('.vf-muscle-check-v50'), function(inp){
+        inp.checked = inp.value === 'Full Body';
+      });
+      syncVisuals();
+    }
+  };
+
+  window.saveWorkout = function(){
+    buildGrid();
+    var type = (byId('wo-type') || {}).value || 'Strength';
+    var muscles = selected();
+    if(!muscles.length) muscles = ['Full Body'];
+    var nameEl = byId('wo-name');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if(!name) name = workoutName(muscles, type);
+    var w = {
+      name:name,
+      type:type,
+      muscle:muscles.join(' + '),
+      duration:type === 'Rest Day' ? 0 : (parseInt((byId('wo-dur') || {}).value, 10) || 0),
+      cal:type === 'Rest Day' ? 0 : (parseInt((byId('wo-cal') || {}).value, 10) || 0),
+      notes:(byId('wo-notes') ? byId('wo-notes').value.trim() : '')
+    };
+    var s = typeof gT === 'function' ? gT() : readJSON('nf_s', {});
+    var tk = todayKey();
+    if(!s[tk]) s[tk] = {meals:[],waterMl:0,workouts:[]};
+    if(!s[tk].workouts) s[tk].workouts = [];
+    s[tk].workouts.push(w);
+    saveState(s);
+    if(typeof updateUI === 'function') updateUI();
+    if(typeof closeWorkoutModal === 'function') closeWorkoutModal();
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(buildGrid, 700); });
+})();
+/* VITALFLOW_WORKOUT_MUSCLE_FIX_V50_END */
+</script>
+<style>
+/* VITALFLOW_THEME_LAYOUT_V51_START */
+html, body, #app, .modal, .modal-overlay {
+  color-scheme: dark !important;
+}
+
+input, select, textarea, button, option, optgroup {
+  color-scheme: dark !important;
+}
+
+.inp, .sel, input, select, textarea {
+  background-color: rgba(15,17,24,.96) !important;
+  color: var(--text, #f0f0f0) !important;
+  border-color: rgba(255,255,255,.11) !important;
+}
+
+select option, select optgroup {
+  background-color: #10121a !important;
+  color: #f0f0f0 !important;
+}
+
+.modal {
+  background: rgba(13,13,24,.98) !important;
+}
+
+#water-card.vf-water-none-v51 {
+  border-color: rgba(255,255,255,.08) !important;
+}
+#water-card.vf-water-half-v51 {
+  border-color: rgba(41,182,246,.38) !important;
+}
+#water-card.vf-water-done-v51 {
+  border-color: rgba(0,229,160,.55) !important;
+}
+
+#habit-home-card.vf-habit-home-v51 {
+  padding: 12px !important;
+  border-color: rgba(0,229,160,.18) !important;
+  background: linear-gradient(135deg, rgba(0,229,160,.045), rgba(124,58,237,.035)) !important;
+}
+
+.vf-hh-head-v51 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.vf-hh-title-v51 {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--text2);
+}
+
+.vf-hh-count-v51 {
+  font-size: 10px;
+  color: var(--text3);
+  white-space: nowrap;
+}
+
+.vf-hh-row-v51 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.vf-hh-label-v51 {
+  width: 42px;
+  flex: 0 0 42px;
+  font-size: 9px;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  font-weight: 900;
+}
+
+.vf-hh-strip-v51 {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: 1;
+  padding-bottom: 1px;
+}
+
+.vf-hh-strip-v51::-webkit-scrollbar {
+  display: none;
+}
+
+.vf-hh-chip-v51 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 168px;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,.045);
+  border: 1px solid rgba(255,255,255,.09);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.vf-hh-name-v51 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 92px;
+}
+
+.vf-hh-dot-v51 {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: 0 0 7px;
+}
+
+.vf-hh-streak-v51 {
+  color: #ffa726;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.vf-hh-good-v51 { color: #00e5a0; }
+.vf-hh-bad-v51 { color: #ff4d6d; }
+.vf-hh-empty-v51 {
+  font-size: 11px;
+  color: var(--text3);
+  padding: 4px 0;
+}
+/* VITALFLOW_THEME_LAYOUT_V51_END */
+</style>
+
+<script>
+/* VITALFLOW_THEME_LAYOUT_V51_SCRIPT_START */
+(function(){
+  if(window.__vfThemeLayoutV51) return;
+  window.__vfThemeLayoutV51 = true;
+
+  function byId(id){ return document.getElementById(id); }
+  function todayKey(){ return (typeof TODAY_KEY !== 'undefined') ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function getLogs(){
+    try { return typeof getHabitLogs === 'function' ? getHabitLogs() : JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function getHabitsSafe(){
+    try { return typeof getHabits === 'function' ? getHabits() : JSON.parse(localStorage.getItem('vf_habits') || '[]'); }
+    catch(e){ return []; }
+  }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  function pauseLimit(h){ return Math.max(0, Math.min(3, parseInt(h.pauseLimit == null ? 3 : h.pauseLimit, 10) || 0)); }
+  function countPausesThisWeek(id){
+    var logs = getLogs();
+    var now = new Date();
+    var start = new Date(now);
+    start.setHours(0,0,0,0);
+    start.setDate(start.getDate() - start.getDay());
+    var count = 0;
+    for(var i=0;i<7;i++){
+      var d = new Date(start);
+      d.setDate(start.getDate()+i);
+      var k = d.toISOString().slice(0,10);
+      var s = (logs[k] || {})[id];
+      if(s === 'skipped' || s === 'paused') count++;
+    }
+    return count;
+  }
+  function pausesLeft(h){ return Math.max(0, pauseLimit(h) - countPausesThisWeek(h.id)); }
+
+  var oldRenderWaterGlass = window.renderWaterGlass;
+  window.renderWaterGlass = function(ml){
+    if(typeof oldRenderWaterGlass === 'function') oldRenderWaterGlass(ml);
+    var goal = (typeof wGoal !== 'undefined' ? wGoal : parseInt(localStorage.getItem('nf_wgoal') || '2000',10)) || 2000;
+    var pct = Math.max(0, Math.min(1, (Number(ml) || 0) / goal));
+    var card = byId('water-card');
+    var rect = byId('water-rect');
+    var stat = byId('water-ml-d');
+    if(card){
+      card.classList.remove('vf-water-none-v51','vf-water-half-v51','vf-water-done-v51');
+      card.classList.add(pct >= 1 ? 'vf-water-done-v51' : pct >= .5 ? 'vf-water-half-v51' : 'vf-water-none-v51');
+    }
+    if(rect){
+      rect.setAttribute('fill', pct >= 1 ? '#00e5a0' : pct >= .5 ? '#29b6f6' : '#2a3140');
+      rect.setAttribute('opacity', pct > 0 ? '.9' : '.35');
+    }
+    if(stat){
+      stat.style.color = pct >= 1 ? '#00e5a0' : pct >= .5 ? '#29b6f6' : '#8a8aa3';
+    }
+  };
+
+  function statusColor(s, type){
+    if(s === 'done' || s === 'maintained') return '#00e5a0';
+    if(s === 'skipped' || s === 'paused') return '#ffa726';
+    if(s === 'missed' || s === 'relapsed') return '#ff4d6d';
+    return type === 'bad' ? 'rgba(255,77,109,.45)' : 'rgba(160,160,184,.55)';
+  }
+
+  function chip(h, todayLog){
+    var s = todayLog[h.id];
+    var color = statusColor(s, h.type);
+    var streak = 0;
+    try { streak = typeof getHabitStreak === 'function' ? getHabitStreak(h.id,h.type) : 0; } catch(e){}
+    var pause = h.type === 'good' ? '<span style="font-size:9px;color:#777;">P '+pausesLeft(h)+'</span>' : '';
+    return '<div class="vf-hh-chip-v51" style="border-color:'+color+'55;">' +
+      '<span class="vf-hh-dot-v51" style="background:'+color+';"></span>' +
+      '<span class="vf-hh-name-v51">'+esc(h.name)+'</span>' +
+      '<span class="vf-hh-streak-v51">&#128293;'+streak+'</span>' +
+      pause +
+    '</div>';
+  }
+
+  window.renderHabitHomeCard = function(){
+    var card = byId('habit-home-card');
+    if(!card) return;
+    var k = todayKey();
+    var d = new Date();
+    var logs = getLogs();
+    var todayLog = logs[k] || {};
+    var visible = getHabitsSafe().filter(function(h){ return createdBy(h,k) && scheduledOn(h,d); });
+    if(!visible.length){
+      card.style.display = 'none';
+      return;
+    }
+    card.style.display = 'block';
+    card.classList.add('vf-habit-home-v51');
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var done = visible.filter(function(h){
+      var s = todayLog[h.id];
+      return s === 'done' || s === 'maintained';
+    }).length;
+
+    var html = '<div class="vf-hh-head-v51">' +
+      '<div class="vf-hh-title-v51">Habits Today</div>' +
+      '<div class="vf-hh-count-v51">'+done+'/'+visible.length+' done</div>' +
+    '</div>';
+
+    html += '<div class="vf-hh-row-v51"><div class="vf-hh-label-v51 vf-hh-good-v51">Good</div><div class="vf-hh-strip-v51">' +
+      (good.length ? good.map(function(h){ return chip(h,todayLog); }).join('') : '<div class="vf-hh-empty-v51">No good habits today</div>') +
+      '</div></div>';
+
+    html += '<div class="vf-hh-row-v51" style="margin-bottom:0;"><div class="vf-hh-label-v51 vf-hh-bad-v51">Bad</div><div class="vf-hh-strip-v51">' +
+      (bad.length ? bad.map(function(h){ return chip(h,todayLog); }).join('') : '<div class="vf-hh-empty-v51">No bad habits today</div>') +
+      '</div></div>';
+
+    card.innerHTML = html;
+  };
+
+  function applyDarkDefaults(){
+    document.documentElement.style.colorScheme = 'dark';
+    document.body.style.colorScheme = 'dark';
+    Array.prototype.forEach.call(document.querySelectorAll('select, input, textarea, option'), function(el){
+      el.style.colorScheme = 'dark';
+    });
+  }
+
+  var oldOpenMeal = window.openMealModal;
+  window.openMealModal = function(){
+    if(typeof oldOpenMeal === 'function') oldOpenMeal();
+    setTimeout(applyDarkDefaults, 0);
+  };
+  var oldOpenWorkout = window.openWorkoutModal;
+  window.openWorkoutModal = function(){
+    if(typeof oldOpenWorkout === 'function') oldOpenWorkout();
+    setTimeout(applyDarkDefaults, 0);
+  };
+  var oldOpenHabit = window.openAddHabitModal;
+  window.openAddHabitModal = function(id){
+    if(typeof oldOpenHabit === 'function') oldOpenHabit(id);
+    setTimeout(applyDarkDefaults, 0);
+  };
+
+  document.addEventListener('DOMContentLoaded', function(){
+    applyDarkDefaults();
+    setTimeout(function(){
+      if(typeof renderHabitHomeCard === 'function') renderHabitHomeCard();
+      if(typeof renderWaterGlass === 'function'){
+        try{
+          var s = typeof gT === 'function' ? gT() : {};
+          var tk = todayKey();
+          renderWaterGlass((s[tk] && s[tk].waterMl) || 0);
+        }catch(e){}
+      }
+    }, 600);
+  });
+  setTimeout(applyDarkDefaults, 500);
+})();
+/* VITALFLOW_THEME_LAYOUT_V51_SCRIPT_END */
+</script>
+<style>
+/* VITALFLOW_POLISH_FIXES_V52_START */
+#habit-home-card .vf-hh-chip-v52 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 168px;
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,.035);
+  border: 1.5px solid rgba(255,255,255,.10);
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+#habit-home-card .vf-hh-chip-v52 .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 106px;
+}
+#habit-home-card .vf-hh-chip-v52 .fire {
+  color: #ffa726;
+  font-size: 10px;
+  font-weight: 900;
+}
+#habit-home-card .vf-hh-chip-v52.done {
+  border-color: rgba(0,229,160,.55);
+  color: #00e5a0;
+  background: rgba(0,229,160,.07);
+}
+#habit-home-card .vf-hh-chip-v52.pause {
+  border-color: rgba(255,167,38,.55);
+  color: #ffa726;
+  background: rgba(255,167,38,.07);
+}
+#habit-home-card .vf-hh-chip-v52.fail {
+  border-color: rgba(255,77,109,.55);
+  color: #ff4d6d;
+  background: rgba(255,77,109,.07);
+}
+#habit-home-card .vf-hh-chip-v52.pending {
+  border-color: rgba(255,255,255,.12);
+  color: var(--text2);
+}
+/* VITALFLOW_POLISH_FIXES_V52_END */
+</style>
+
+<script>
+/* VITALFLOW_POLISH_FIXES_V52_SCRIPT_START */
+(function(){
+  if(window.__vfPolishFixesV52) return;
+  window.__vfPolishFixesV52 = true;
+
+  var MUSCLES = ['Full Body','Chest','Back','Legs','Shoulders','Arms','Core','Cardio'];
+
+  function byId(id){ return document.getElementById(id); }
+  function todayKey(){ return (typeof TODAY_KEY !== 'undefined') ? TODAY_KEY : new Date().toISOString().slice(0,10); }
+  function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch(e){ return fallback; } }
+  function saveState(s){ if(typeof sS === 'function') sS(s); else localStorage.setItem('nf_s', JSON.stringify(s)); }
+  function getLogs(){ try { return typeof getHabitLogs === 'function' ? getHabitLogs() : JSON.parse(localStorage.getItem('vf_habit_logs') || '{}'); } catch(e){ return {}; } }
+  function getHabitsSafe(){ try { return typeof getHabits === 'function' ? getHabits() : JSON.parse(localStorage.getItem('vf_habits') || '[]'); } catch(e){ return []; } }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function createdBy(h,k){ return !h.created || h.created <= k; }
+  function scheduledOn(h,d){ return !h.daysOfWeek || !h.daysOfWeek.length || h.daysOfWeek.indexOf(d.getDay()) >= 0; }
+
+  function fixWaterHeading(){
+    var card = byId('water-card');
+    if(!card) return;
+    var title = card.querySelector('.card-title');
+    if(title) title.textContent = '\uD83D\uDCA7 Water Tracker';
+  }
+
+  var oldRenderWaterGlass = window.renderWaterGlass;
+  window.renderWaterGlass = function(ml){
+    if(typeof oldRenderWaterGlass === 'function') oldRenderWaterGlass(ml);
+    fixWaterHeading();
+    var goal = (typeof wGoal !== 'undefined' ? wGoal : parseInt(localStorage.getItem('nf_wgoal') || '2000',10)) || 2000;
+    var pct = Math.max(0, Math.min(1, (Number(ml) || 0) / goal));
+    var color = pct >= 1 ? '#00e5a0' : pct >= .5 ? '#29b6f6' : '#293241';
+    var rect = byId('water-rect');
+    if(rect){
+      rect.setAttribute('fill', color);
+      rect.style.fill = color;
+      rect.style.opacity = pct > 0 ? '.92' : '.42';
+    }
+    var card = byId('water-card');
+    if(card){
+      card.style.borderColor = pct >= 1 ? 'rgba(0,229,160,.55)' : pct >= .5 ? 'rgba(41,182,246,.42)' : 'rgba(255,255,255,.08)';
+    }
+  };
+
+  function getGrid(){ return byId('vf-muscle-grid-v50') || byId('vf-muscle-grid-v52'); }
+  function selectedMuscles(){
+    var grid = getGrid();
+    if(!grid) return [];
+    return Array.prototype.slice.call(grid.querySelectorAll('input[type="checkbox"]:checked')).map(function(el){ return el.value; });
+  }
+  function styleMuscle(btn, active){
+    btn.style.border = active ? '1px solid rgba(0,229,160,.65)' : '1px solid rgba(255,255,255,.12)';
+    btn.style.background = active ? 'linear-gradient(135deg, rgba(0,229,160,.22), rgba(0,180,216,.16))' : 'rgba(255,255,255,.045)';
+    btn.style.color = active ? '#00e5a0' : 'var(--text2)';
+    btn.style.boxShadow = active ? '0 0 12px rgba(0,229,160,.14)' : 'none';
+  }
+  function syncMuscleVisuals(){
+    var grid = getGrid();
+    if(!grid) return;
+    Array.prototype.forEach.call(grid.querySelectorAll('button[data-value]'), function(btn){
+      var input = grid.querySelector('input[value="'+btn.dataset.value+'"]');
+      styleMuscle(btn, !!(input && input.checked));
+    });
+    var vals = selectedMuscles();
+    var sel = byId('wo-muscle');
+    if(sel && vals.length) sel.value = vals[0];
+  }
+  function ensureWorkoutGrid(){
+    var modal = byId('workout-modal');
+    if(!modal) return;
+    var old = byId('vf-muscle-grid-v20');
+    if(old) old.style.display = 'none';
+    var grid = byId('vf-muscle-grid-v50');
+    if(!grid){
+      grid = document.createElement('div');
+      grid.id = 'vf-muscle-grid-v50';
+      grid.style.cssText = 'display:flex;gap:7px;margin-bottom:8px;flex-wrap:wrap;';
+      var sel = byId('wo-muscle');
+      if(sel){ sel.style.display = 'none'; sel.insertAdjacentElement('afterend', grid); }
+      else {
+        var type = byId('wo-type');
+        if(type) type.insertAdjacentElement('afterend', grid);
+      }
+      grid.innerHTML = MUSCLES.map(function(m,i){
+        return '<input class="vf-muscle-check-v50" type="checkbox" value="'+m+'" '+(i===0?'checked':'')+' style="display:none;">' +
+          '<button type="button" class="vf-muscle-chip-v50" data-value="'+m+'" style="border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;font-family:inherit;white-space:nowrap;cursor:pointer;">'+m+'</button>';
+      }).join('');
+    }
+    if(!grid.__vfClickV52){
+      grid.__vfClickV52 = true;
+      grid.addEventListener('click', function(e){
+        var btn = e.target.closest('button[data-value]');
+        if(!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var val = btn.dataset.value;
+        var inputs = Array.prototype.slice.call(grid.querySelectorAll('input[type="checkbox"]'));
+        var input = grid.querySelector('input[value="'+val+'"]');
+        if(!input) return;
+        if(val === 'Full Body'){
+          inputs.forEach(function(inp){ inp.checked = inp.value === 'Full Body'; });
+        } else {
+          var full = grid.querySelector('input[value="Full Body"]');
+          if(full) full.checked = false;
+          input.checked = !input.checked;
+          if(!inputs.some(function(inp){ return inp.checked; }) && full) full.checked = true;
+        }
+        syncMuscleVisuals();
+      }, true);
+    }
+    syncMuscleVisuals();
+  }
+
+  var oldOpenWorkout = window.openWorkoutModal;
+  window.openWorkoutModal = function(){
+    if(typeof oldOpenWorkout === 'function') oldOpenWorkout();
+    else {
+      var modal = byId('workout-modal');
+      if(modal) modal.classList.add('open');
+    }
+    setTimeout(ensureWorkoutGrid, 0);
+    setTimeout(ensureWorkoutGrid, 120);
+  };
+
+  function workoutName(muscles, type){
+    if(type === 'Rest Day') return 'Rest Day';
+    if(!muscles.length) return type + ' Day';
+    if(muscles.length === 1 && muscles[0] === 'Full Body') return 'Full Body Day';
+    return muscles.join(' & ') + ' Day';
+  }
+  window.saveWorkout = function(){
+    ensureWorkoutGrid();
+    var type = (byId('wo-type') || {}).value || 'Strength';
+    var muscles = selectedMuscles();
+    if(!muscles.length) muscles = ['Full Body'];
+    var nameEl = byId('wo-name');
+    var name = nameEl ? nameEl.value.trim() : '';
+    if(!name) name = workoutName(muscles, type);
+    var w = {
+      name:name,
+      type:type,
+      muscle:muscles.join(' + '),
+      duration:type === 'Rest Day' ? 0 : (parseInt((byId('wo-dur') || {}).value, 10) || 0),
+      cal:type === 'Rest Day' ? 0 : (parseInt((byId('wo-cal') || {}).value, 10) || 0),
+      notes:(byId('wo-notes') ? byId('wo-notes').value.trim() : '')
+    };
+    var s = typeof gT === 'function' ? gT() : readJSON('nf_s', {});
+    var tk = todayKey();
+    if(!s[tk]) s[tk] = {meals:[],waterMl:0,workouts:[]};
+    if(!s[tk].workouts) s[tk].workouts = [];
+    s[tk].workouts.push(w);
+    saveState(s);
+    if(typeof updateUI === 'function') updateUI();
+    if(typeof closeWorkoutModal === 'function') closeWorkoutModal();
+  };
+
+  function habitChipClass(status){
+    if(status === 'done' || status === 'maintained') return 'done';
+    if(status === 'skipped' || status === 'paused') return 'pause';
+    if(status === 'missed' || status === 'relapsed') return 'fail';
+    return 'pending';
+  }
+  function renderHabitHomeV52(){
+    var card = byId('habit-home-card');
+    if(!card) return;
+    var k = todayKey();
+    var d = new Date();
+    var logs = getLogs();
+    var todayLog = logs[k] || {};
+    var visible = getHabitsSafe().filter(function(h){ return createdBy(h,k) && scheduledOn(h,d); });
+    if(!visible.length){ card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    card.classList.add('vf-habit-home-v51');
+    var good = visible.filter(function(h){ return h.type === 'good'; });
+    var bad = visible.filter(function(h){ return h.type === 'bad'; });
+    var done = visible.filter(function(h){ var s=todayLog[h.id]; return s === 'done' || s === 'maintained'; }).length;
+    function chip(h){
+      var s = todayLog[h.id];
+      var streak = 0;
+      try{ streak = typeof getHabitStreak === 'function' ? getHabitStreak(h.id,h.type) : 0; }catch(e){}
+      return '<div class="vf-hh-chip-v52 '+habitChipClass(s)+'"><span class="name">'+esc(h.name)+'</span><span class="fire">&#128293; '+streak+'</span></div>';
+    }
+    var html = '<div class="vf-hh-head-v51"><div class="vf-hh-title-v51">Habits Today</div><div class="vf-hh-count-v51">'+done+'/'+visible.length+' done</div></div>';
+    html += '<div class="vf-hh-row-v51"><div class="vf-hh-label-v51 vf-hh-good-v51">Good</div><div class="vf-hh-strip-v51">'+(good.length ? good.map(chip).join('') : '<div class="vf-hh-empty-v51">No good habits today</div>')+'</div></div>';
+    html += '<div class="vf-hh-row-v51" style="margin-bottom:0;"><div class="vf-hh-label-v51 vf-hh-bad-v51">Bad</div><div class="vf-hh-strip-v51">'+(bad.length ? bad.map(chip).join('') : '<div class="vf-hh-empty-v51">No bad habits today</div>')+'</div></div>';
+    card.innerHTML = html;
+  }
+  window.renderHabitHomeCard = renderHabitHomeV52;
+
+  function openDietCoachDirect(){
+    if(typeof showScreen === 'function') showScreen('planner', null);
+    else {
+      Array.prototype.forEach.call(document.querySelectorAll('.screen'), function(s){ s.classList.remove('active'); });
+      var planner = byId('screen-planner');
+      if(planner) planner.classList.add('active');
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('.nav-btn'), function(b){ b.classList.remove('active'); });
+    setTimeout(function(){
+      var first = byId('pl-age') || byId('screen-planner');
+      if(first && first.scrollIntoView) first.scrollIntoView({behavior:'smooth', block:'start'});
+    }, 80);
+  }
+  window.openDietCoach = openDietCoachDirect;
+  document.addEventListener('click', function(e){
+    var target = e.target.closest('#vf-profile-diet-coach-open-v23,#vf-more-diet-coach-open-v23,#vf-profile-diet-coach-btn-v23,#vf-more-diet-coach-btn-v23');
+    if(!target) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openDietCoachDirect();
+  }, true);
+
+  function init(){
+    fixWaterHeading();
+    ensureWorkoutGrid();
+    renderHabitHomeV52();
+    try{
+      var s = typeof gT === 'function' ? gT() : {};
+      var tk = todayKey();
+      if(typeof renderWaterGlass === 'function') renderWaterGlass((s[tk] && s[tk].waterMl) || 0);
+    }catch(e){}
+  }
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(init, 600); });
+  setTimeout(init, 800);
+})();
+/* VITALFLOW_POLISH_FIXES_V52_SCRIPT_END */
 </script></body></html>
